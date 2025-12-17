@@ -38,7 +38,7 @@ import {
 import { candidateService, CandidateRequest, aiService, ParsedResume, Candidate, jobService, Job, applicationService } from '../services/api'
 import FileUpload from '../components/FileUpload'
 import { toast } from '../components/Toast'
-import { formatPhoneForDisplay } from '../utils/phoneFormatter'
+import { formatPhoneForDisplay, formatPhoneForInput } from '../utils/phoneFormatter'
 
 const useStyles = makeStyles({
   container: {

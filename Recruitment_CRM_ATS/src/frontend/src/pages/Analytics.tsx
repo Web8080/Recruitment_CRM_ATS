@@ -126,7 +126,7 @@ const COLORS = ['#667eea', '#764ba2', '#f093fb', '#4facfe', '#00f2fe', '#43e97b'
 export default function Analytics() {
   const styles = useStyles()
 
-  const { data: analytics, isLoading, error } = useQuery({
+  const { data: analytics, isLoading } = useQuery({
     queryKey: ['analytics'],
     queryFn: () => analyticsService.getAnalytics(),
     retry: 1,
