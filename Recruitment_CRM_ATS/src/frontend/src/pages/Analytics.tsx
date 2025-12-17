@@ -126,9 +126,10 @@ const COLORS = ['#667eea', '#764ba2', '#f093fb', '#4facfe', '#00f2fe', '#43e97b'
 export default function Analytics() {
   const styles = useStyles()
 
-  const { data: analytics, isLoading } = useQuery({
+  const { data: analytics, isLoading, error } = useQuery({
     queryKey: ['analytics'],
     queryFn: () => analyticsService.getAnalytics(),
+    retry: 1,
   })
 
   if (isLoading) {
@@ -153,13 +154,15 @@ export default function Analytics() {
     value,
   }))
 
-  const monthlyData = Object.entries(analytics.monthlyTrends || {})
-    .map(([month, count]) => ({
-      month: month.substring(5), // Get MM from YYYY-MM
-      count,
-    }))
-    .sort((a, b) => a.month.localeCompare(b.month))
-    .slice(-6) // Last 6 months
+  const monthlyData = analytics.monthlyTrends 
+    ? Object.entries(analytics.monthlyTrends)
+        .map(([month, count]) => ({
+          month: month.substring(5), // Get MM from YYYY-MM
+          count: count as number,
+        }))
+        .sort((a, b) => a.month.localeCompare(b.month))
+        .slice(-6) // Last 6 months
+    : []
 
   const handleExport = () => {
     // PLACEHOLDER: Export functionality

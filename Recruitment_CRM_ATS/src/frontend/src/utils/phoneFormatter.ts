@@ -81,3 +81,29 @@ export function formatPhoneForStorage(phone: string): string {
   return cleaned
 }
 
+export function formatPhoneForInput(phone: string): string {
+  // Format for input field: 07xxx xxx xxx (UK format without +44)
+  if (!phone) return ''
+  
+  let cleaned = phone.replace(/[^\d+]/g, '')
+  
+  // Remove +44 prefix if present
+  if (cleaned.startsWith('+44')) {
+    cleaned = '0' + cleaned.substring(3)
+  } else if (cleaned.startsWith('44')) {
+    cleaned = '0' + cleaned.substring(2)
+  }
+  
+  // Ensure starts with 0
+  if (cleaned.length > 0 && !cleaned.startsWith('0')) {
+    cleaned = '0' + cleaned
+  }
+  
+  // Format mobile numbers (07xxx xxx xxx)
+  if (cleaned.startsWith('07') && cleaned.length === 11) {
+    return `${cleaned.substring(0, 5)} ${cleaned.substring(5, 8)} ${cleaned.substring(8)}`
+  }
+  
+  return cleaned
+}
+
