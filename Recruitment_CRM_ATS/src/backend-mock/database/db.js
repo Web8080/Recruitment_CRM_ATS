@@ -13,6 +13,9 @@ class Database {
     this.jobs = [];
     this.applications = [];
     this.users = [];
+    this.interviews = [];
+    this.notes = [];
+    this.activityLog = [];
     this.initializeSampleData();
   }
 
@@ -350,6 +353,103 @@ class Database {
       trends[month] = (trends[month] || 0) + 1;
     });
     return trends;
+  }
+
+  // Interview methods
+  async getInterviews(filters = {}) {
+    let results = [...this.interviews];
+    if (filters.applicationId) {
+      results = results.filter(i => i.applicationId === filters.applicationId);
+    }
+    if (filters.status) {
+      results = results.filter(i => i.status === filters.status);
+    }
+    return results.map(interview => ({
+      ...interview,
+      candidate: this.candidates.find(c => {
+        const app = this.applications.find(a => a.id === interview.applicationId);
+        return app && (c.id === app.candidateId || c.id === parseInt(app.candidateId));
+      }),
+      job: this.jobs.find(j => {
+        const app = this.applications.find(a => a.id === interview.applicationId);
+        return app && (j.id === app.jobId || j.id === parseInt(app.jobId));
+      })
+    }));
+  }
+
+  async getInterviewById(id) {
+    return this.interviews.find(i => i.id === id || i.id === parseInt(id));
+  }
+
+  async createInterview(interview) {
+    const newInterview = {
+      id: `interview-${this.interviews.length + 1}`,
+      ...interview,
+      status: interview.status || 'Scheduled',
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    this.interviews.push(newInterview);
+    return newInterview;
+  }
+
+  async updateInterview(id, updates) {
+    const index = this.interviews.findIndex(i => i.id === id || i.id === parseInt(id));
+    if (index === -1) return null;
+    this.interviews[index] = { ...this.interviews[index], ...updates, updatedAt: new Date().toISOString() };
+    return this.interviews[index];
+  }
+
+  async deleteInterview(id) {
+    const index = this.interviews.findIndex(i => i.id === id || i.id === parseInt(id));
+    if (index === -1) return false;
+    this.interviews.splice(index, 1);
+    return true;
+  }
+
+  // Notes methods
+  async getNotes(entityType, entityId) {
+    return this.notes.filter(n => n.entityType === entityType && (n.entityId === entityId || n.entityId === parseInt(entityId)));
+  }
+
+  async createNote(note) {
+    const newNote = {
+      id: `note-${this.notes.length + 1}`,
+      ...note,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    this.notes.push(newNote);
+    return newNote;
+  }
+
+  async updateNote(id, updates) {
+    const index = this.notes.findIndex(n => n.id === id || n.id === parseInt(id));
+    if (index === -1) return null;
+    this.notes[index] = { ...this.notes[index], ...updates, updatedAt: new Date().toISOString() };
+    return this.notes[index];
+  }
+
+  async deleteNote(id) {
+    const index = this.notes.findIndex(n => n.id === id || n.id === parseInt(id));
+    if (index === -1) return false;
+    this.notes.splice(index, 1);
+    return true;
+  }
+
+  // Activity log methods
+  async logActivity(activity) {
+    const newActivity = {
+      id: `activity-${this.activityLog.length + 1}`,
+      ...activity,
+      createdAt: new Date().toISOString()
+    };
+    this.activityLog.push(newActivity);
+    return newActivity;
+  }
+
+  async getActivityLog(entityType, entityId) {
+    return this.activityLog.filter(a => a.entityType === entityType && (a.entityId === entityId || a.entityId === parseInt(entityId)));
   }
 }
 

@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const db = require('./database/db');
 const jobBoards = require('./integrations/jobBoards');
+const interviewsRouter = require('./routes/interviews');
 const app = express();
 const PORT = 7071;
 
@@ -25,6 +26,18 @@ const upload = multer({
 
 app.use(cors());
 app.use(express.json());
+
+// Interview routes
+app.use('/api/interviews', authenticateToken, interviewsRouter);
+
+// Notes routes
+app.use('/api/notes', authenticateToken, notesRouter);
+
+// Export routes
+app.use('/api/export', authenticateToken, exportRouter);
+
+// Enhanced AI routes
+app.use('/api/ai-enhanced', authenticateToken, aiEnhancedRouter);
 
 // Root endpoint
 app.get('/', (req, res) => {

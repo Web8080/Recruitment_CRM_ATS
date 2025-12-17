@@ -158,6 +158,7 @@ export default function Layout({ children }: LayoutProps) {
     { name: 'Candidates', path: '/candidates', icon: People24Regular },
     { name: 'Jobs', path: '/jobs', icon: Briefcase24Regular },
     { name: 'Applications', path: '/applications', icon: Document24Regular },
+    { name: 'Calendar', path: '/calendar', icon: CalendarMonth24Regular },
     { name: 'AI Services', path: '/ai-services', icon: Sparkle24Regular },
     { name: 'Analytics', path: '/analytics', icon: DataTrending24Regular },
   ]

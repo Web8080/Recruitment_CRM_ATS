@@ -11,6 +11,7 @@ import Jobs from './pages/Jobs'
 import Applications from './pages/Applications'
 import AIServices from './pages/AIServices'
 import Analytics from './pages/Analytics'
+import Calendar from './pages/Calendar'
 import PrivateRoute from './components/PrivateRoute'
 
 function App() {
@@ -88,6 +89,16 @@ function App() {
                 <PrivateRoute>
                   <Layout>
                     <Analytics />
+                  </Layout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/calendar"
+              element={
+                <PrivateRoute>
+                  <Layout>
+                    <Calendar />
                   </Layout>
                 </PrivateRoute>
               }
