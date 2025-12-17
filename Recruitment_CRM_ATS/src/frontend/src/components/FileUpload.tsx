@@ -74,7 +74,8 @@ const useStyles = makeStyles({
 })
 
 interface FileUploadProps {
-  onFileUploaded: (file: File, text: string) => void
+  onFileUploaded?: (file: File, text: string) => void
+  onFileUpload?: (file: File) => void
   onError?: (error: string) => void
   accept?: Record<string, string[]>
   maxSize?: number
@@ -90,6 +91,7 @@ const defaultAccept: Record<string, string[]> = {
 
 export default function FileUpload({
   onFileUploaded,
+  onFileUpload,
   onError,
   accept,
   maxSize = 10 * 1024 * 1024, // 10MB
@@ -143,7 +145,11 @@ export default function FileUpload({
           text = 'File uploaded - processing on server...'
         }
         setStatus('success')
-        onFileUploaded(file, text)
+        if (onFileUpload) {
+          onFileUpload(file)
+        } else if (onFileUploaded) {
+          onFileUploaded(file, text)
+        }
       } catch (error) {
         const errorMsg = error instanceof Error ? error.message : 'Failed to process file'
         setErrorMessage(errorMsg)
@@ -153,7 +159,7 @@ export default function FileUpload({
         setIsProcessing(false)
       }
     },
-    [onFileUploaded, onError]
+    [onFileUploaded, onFileUpload, onError]
   )
 
   const { getRootProps, getInputProps, isDragActive, isDragReject } = useDropzone({

@@ -415,7 +415,55 @@ app.post('/api/applications', authenticateToken, async (req, res) => {
       return res.status(429).json({ error: 'Rate limit exceeded' });
     }
     
-    const application = await db.createApplication(req.body);
+    // Auto-calculate match score if not provided
+    let matchScore = req.body.matchScore;
+    if (matchScore === undefined && req.body.candidateId && req.body.jobId) {
+      try {
+        const candidate = await db.getCandidateById(req.body.candidateId);
+        const job = await db.getJobById(req.body.jobId);
+        
+        if (candidate && job) {
+          const candidateProfile = JSON.stringify({
+            skills: candidate.skills || [],
+            experience: candidate.experience || [],
+            education: candidate.education || [],
+            summary: candidate.summary || '',
+          });
+          
+          const jobDescription = `${job.title}\n${job.description || ''}\n${job.requirements || ''}`;
+          
+          const matchResult = await fetch(`${process.env.OLLAMA_BASE_URL || 'http://localhost:11434'}/api/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              model: process.env.OLLAMA_MODEL || 'llama2',
+              prompt: `Calculate match score (0-100) between candidate and job. Return JSON: {"matchScore": number, "breakdown": {"skillsMatch": number, "experienceMatch": number, "educationMatch": number, "keywordsMatch": number}}\n\nCandidate: ${candidateProfile}\n\nJob: ${jobDescription}`,
+              stream: false
+            })
+          });
+          
+          if (matchResult.ok) {
+            const data = await matchResult.json();
+            const responseText = data.response || '';
+            const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+              const parsed = JSON.parse(jsonMatch[0]);
+              matchScore = parsed.matchScore || 0;
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Error calculating match score:', error);
+        // Continue without match score if calculation fails
+      }
+    }
+    
+    const applicationData = {
+      ...req.body,
+      matchScore: matchScore || null
+    };
+    
+    const application = await db.createApplication(applicationData);
     res.status(201).json(application);
   } catch (error) {
     console.error('Error creating application:', error);

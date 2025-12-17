@@ -35,7 +35,7 @@ import {
   Edit24Regular,
   Delete24Regular,
 } from '@fluentui/react-icons'
-import { candidateService, CandidateRequest, aiService, ParsedResume, Candidate } from '../services/api'
+import { candidateService, CandidateRequest, aiService, ParsedResume, Candidate, jobService, Job, applicationService } from '../services/api'
 import FileUpload from '../components/FileUpload'
 import { toast } from '../components/Toast'
 import { formatPhoneForDisplay } from '../utils/phoneFormatter'
@@ -148,6 +148,9 @@ export default function Candidates() {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [parsedData, setParsedData] = useState<ParsedResume | null>(null)
+  const [selectedJobId, setSelectedJobId] = useState<string>('')
+  const [matchScore, setMatchScore] = useState<number | null>(null)
+  const [isCalculatingMatch, setIsCalculatingMatch] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [sourceFilter, setSourceFilter] = useState('')
@@ -163,14 +166,38 @@ export default function Candidates() {
     queryFn: () => candidateService.getAll({ search: searchQuery, status: statusFilter || undefined, source: sourceFilter || undefined }),
   })
 
+  const { data: jobs = [] } = useQuery<Job[]>({
+    queryKey: ['jobs'],
+    queryFn: () => jobService.getAll({ status: 'Open' }),
+  })
+
   const createMutation = useMutation({
-    mutationFn: candidateService.create,
+    mutationFn: async (data: CandidateRequest) => {
+      const candidate = await candidateService.create(data)
+      
+      // If job is selected, create application with match score
+      if (selectedJobId && matchScore !== null) {
+        try {
+          await applicationService.create({
+            candidateId: candidate.id,
+            jobId: selectedJobId,
+            matchScore: matchScore,
+          })
+        } catch (error) {
+          console.error('Error creating application:', error)
+        }
+      }
+      
+      return candidate
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['candidates'] })
       setIsDialogOpen(false)
       setFormData({ firstName: '', lastName: '', email: '', phone: '' })
       setParsedData(null)
-      toast.success('Candidate created successfully')
+      setSelectedJobId('')
+      setMatchScore(null)
+      toast.success('Candidate created successfully' + (matchScore !== null ? ` (Match Score: ${matchScore}%)` : ''))
     },
     onError: () => {
       toast.error('Failed to create candidate')
@@ -187,6 +214,32 @@ export default function Candidates() {
       toast.error('Failed to delete candidate')
     },
   })
+
+  const calculateMatchScore = async (candidateData: any, jobId: string) => {
+    if (!jobId || !candidateData) return
+
+    setIsCalculatingMatch(true)
+    try {
+      const job = jobs.find(j => j.id === jobId)
+      if (!job) return
+
+      const candidateProfile = JSON.stringify({
+        skills: candidateData.skills || parsedData?.skills || [],
+        experience: candidateData.experience || parsedData?.experience || [],
+        education: candidateData.education || parsedData?.education || [],
+        summary: candidateData.summary || parsedData?.summary || '',
+      })
+
+      const jobDescription = `${job.title}\n${job.description || ''}\n${job.requirements || ''}`
+      
+      const matchResult = await aiService.matchCandidate(candidateProfile, jobDescription)
+      setMatchScore(matchResult.matchScore || 0)
+    } catch (error) {
+      console.error('Error calculating match score:', error)
+    } finally {
+      setIsCalculatingMatch(false)
+    }
+  }
 
   const handleFileUpload = async (file: File) => {
     setIsUploading(true)
@@ -212,10 +265,25 @@ export default function Candidates() {
           phone: extracted.phone || '',
         })
       }
+
+      // Auto-calculate match score if job is selected
+      if (selectedJobId) {
+        await calculateMatchScore(extracted, selectedJobId)
+      }
     } catch (error) {
       console.error('Error parsing resume:', error)
+      toast.error('Failed to parse resume')
     } finally {
       setIsUploading(false)
+    }
+  }
+
+  const handleJobChange = async (jobId: string) => {
+    setSelectedJobId(jobId)
+    setMatchScore(null)
+    
+    if (jobId && (parsedData || formData.firstName)) {
+      await calculateMatchScore(parsedData || formData, jobId)
     }
   }
 
@@ -227,6 +295,8 @@ export default function Candidates() {
     setIsDialogOpen(false)
     setFormData({ firstName: '', lastName: '', email: '', phone: '' })
     setParsedData(null)
+    setSelectedJobId('')
+    setMatchScore(null)
   }
 
   return (
@@ -291,7 +361,6 @@ export default function Candidates() {
               <TableHeaderCell>Name</TableHeaderCell>
               <TableHeaderCell>Email</TableHeaderCell>
               <TableHeaderCell>Phone</TableHeaderCell>
-              <TableHeaderCell>Experience</TableHeaderCell>
               <TableHeaderCell>Status</TableHeaderCell>
               <TableHeaderCell>Source</TableHeaderCell>
               <TableHeaderCell>Actions</TableHeaderCell>
@@ -300,13 +369,13 @@ export default function Candidates() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={7} style={{ textAlign: 'center', padding: tokens.spacingVerticalXXL }}>
+                <TableCell colSpan={6} style={{ textAlign: 'center', padding: tokens.spacingVerticalXXL }}>
                   <Spinner size="medium" />
                 </TableCell>
               </TableRow>
             ) : candidates.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7}>
+                <TableCell colSpan={6}>
                   <div className={styles.emptyState}>
                     <Person24Regular style={{ fontSize: '48px', marginBottom: tokens.spacingVerticalM }} />
                     <Text size={400}>No candidates found</Text>
@@ -332,21 +401,6 @@ export default function Candidates() {
                   </TableCell>
                   <TableCell>{candidate.email}</TableCell>
                   <TableCell>{candidate.phone ? formatPhoneForDisplay(candidate.phone) : '-'}</TableCell>
-                  <TableCell>
-                    {candidate.experience ? (
-                      <Text size={300}>
-                        {Array.isArray(candidate.experience) 
-                          ? candidate.experience.map((exp: any, idx: number) => 
-                              `${exp.position || 'N/A'} at ${exp.company || 'N/A'}${exp.duration ? ` (${exp.duration})` : ''}`
-                            ).join(', ')
-                          : typeof candidate.experience === 'string'
-                          ? candidate.experience.substring(0, 50) + (candidate.experience.length > 50 ? '...' : '')
-                          : 'N/A'}
-                      </Text>
-                    ) : (
-                      <Text size={300} style={{ color: tokens.colorNeutralForeground3 }}>-</Text>
-                    )}
-                  </TableCell>
                   <TableCell>
                     <Badge
                       appearance={candidate.status === 'Active' ? 'filled' : 'outline'}
@@ -403,7 +457,7 @@ export default function Candidates() {
                   <Text weight="semibold">Upload Resume (AI-Powered Parsing)</Text>
                 </div>
                 <FileUpload
-                  onFileUploaded={handleFileUpload}
+                  onFileUpload={handleFileUpload}
                   onError={(error) => console.error('Upload error:', error)}
                   disabled={isUploading}
                 />
@@ -438,7 +492,44 @@ export default function Candidates() {
               <Divider />
 
               <div className={styles.formSection}>
-                <Text weight="semibold" size={400}>Candidate Information</Text>
+                <Field label="Select Job (Optional - for match score calculation)">
+                  <Select
+                    value={selectedJobId}
+                    onChange={(_, data) => handleJobChange(data.value)}
+                    placeholder="Select a job to calculate match score..."
+                  >
+                    <option value="">-- No Job Selected --</option>
+                    {jobs.map((job) => (
+                      <option key={job.id} value={job.id}>
+                        {job.title} - {job.department} ({job.location})
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+
+                {matchScore !== null && (
+                  <div style={{ 
+                    marginTop: tokens.spacingVerticalM, 
+                    padding: tokens.spacingVerticalM, 
+                    backgroundColor: tokens.colorNeutralBackground2, 
+                    borderRadius: tokens.borderRadiusMedium,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: tokens.spacingHorizontalM
+                  }}>
+                    <Text weight="semibold">Match Score:</Text>
+                    <Badge 
+                      appearance="filled" 
+                      color={matchScore >= 80 ? 'success' : matchScore >= 60 ? 'warning' : 'error'}
+                      size="large"
+                    >
+                      {matchScore}%
+                    </Badge>
+                    {isCalculatingMatch && <Spinner size="tiny" />}
+                  </div>
+                )}
+
+                <Text weight="semibold" size={400} style={{ marginTop: tokens.spacingVerticalL }}>Candidate Information</Text>
                 <div className={styles.twoColumn}>
                   <Field label="First Name" required>
                     <Input
@@ -475,7 +566,7 @@ export default function Candidates() {
                     onChange={(_, data) =>
                       setFormData({ ...formData, phone: data.value })
                     }
-                    placeholder="+1 (555) 123-4567"
+                    placeholder="07xxx xxx xxx"
                   />
                 </Field>
               </div>

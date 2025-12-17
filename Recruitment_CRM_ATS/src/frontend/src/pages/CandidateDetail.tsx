@@ -266,6 +266,32 @@ export default function CandidateDetail() {
           </div>
         )}
 
+        {candidate.experience && (
+          <div className={styles.section}>
+            <Text className={styles.sectionTitle}>Experience</Text>
+            {Array.isArray(candidate.experience) ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacingVerticalM }}>
+                {candidate.experience.map((exp: any, idx: number) => (
+                  <div key={idx} style={{ padding: tokens.spacingVerticalM, backgroundColor: tokens.colorNeutralBackground2, borderRadius: tokens.borderRadiusMedium }}>
+                    <Text weight="semibold" size={400}>{exp.position || 'N/A'}</Text>
+                    <Text size={300} style={{ color: tokens.colorNeutralForeground2 }}>
+                      {exp.company || 'N/A'}
+                      {exp.duration && ` • ${exp.duration}`}
+                    </Text>
+                    {exp.description && (
+                      <Text size={300} style={{ marginTop: tokens.spacingVerticalXS, color: tokens.colorNeutralForeground3 }}>
+                        {exp.description}
+                      </Text>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <Text size={300}>{candidate.experience}</Text>
+            )}
+          </div>
+        )}
+
         <div className={styles.actions}>
           <Button
             appearance="secondary"
