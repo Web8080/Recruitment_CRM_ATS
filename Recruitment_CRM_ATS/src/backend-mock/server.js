@@ -8,21 +8,13 @@ const db = require('./database/db');
 const jobBoards = require('./integrations/jobBoards');
 const interviewsRouter = require('./routes/interviews');
 
-// PDF parsing - handle different versions of pdf-parse
+// PDF parsing - pdf-parse v1.1.1 exports function directly
 let pdfParse;
 try {
-  const pdfParseModule = require('pdf-parse');
-  // pdf-parse v2.x exports an object with PDFParse property
-  // pdf-parse v1.x exports the function directly
-  if (typeof pdfParseModule === 'function') {
-    pdfParse = pdfParseModule;
-  } else if (pdfParseModule.PDFParse && typeof pdfParseModule.PDFParse === 'function') {
-    pdfParse = pdfParseModule.PDFParse;
-  } else if (pdfParseModule.default && typeof pdfParseModule.default === 'function') {
-    pdfParse = pdfParseModule.default;
-  } else {
-    // Fallback: try to use the module as-is
-    pdfParse = pdfParseModule;
+  pdfParse = require('pdf-parse');
+  if (typeof pdfParse !== 'function') {
+    console.warn('pdf-parse is not a function, will use fallback methods');
+    pdfParse = null;
   }
 } catch (error) {
   console.warn('pdf-parse not available, will use alternative methods:', error.message);
