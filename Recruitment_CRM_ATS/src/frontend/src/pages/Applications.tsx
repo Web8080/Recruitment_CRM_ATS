@@ -108,7 +108,15 @@ export default function Applications() {
   })
 
   const createMutation = useMutation({
-    mutationFn: (application: Partial<Application>) => applicationService.create(application),
+    mutationFn: (application: Partial<Application>) => {
+      const appRequest = {
+        candidateId: application.candidateId || '',
+        jobId: application.jobId || '',
+        notes: application.notes,
+        matchScore: application.matchScore,
+      }
+      return applicationService.create(appRequest)
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['applications'] })
       toast.success('Application created successfully')

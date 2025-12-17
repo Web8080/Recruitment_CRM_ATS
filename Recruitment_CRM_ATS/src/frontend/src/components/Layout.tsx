@@ -4,7 +4,6 @@ import {
   tokens,
   Button,
   Text,
-  Avatar,
   Menu,
   MenuTrigger,
   MenuPopover,
@@ -21,8 +20,8 @@ import {
   DataTrending24Regular,
   SignOut24Regular,
   Person24Regular,
-  DarkTheme24Regular,
-  LightTheme24Regular,
+  WeatherMoon24Regular,
+  WeatherSunny24Regular,
 } from '@fluentui/react-icons'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
@@ -198,7 +197,7 @@ export default function Layout({ children }: LayoutProps) {
           <div className={styles.userMenu}>
             <Button
               appearance="subtle"
-              icon={theme === 'dark' ? <LightTheme24Regular /> : <DarkTheme24Regular />}
+              icon={theme === 'dark' ? <WeatherSunny24Regular /> : <WeatherMoon24Regular />}
               onClick={toggleTheme}
               className={styles.themeToggle}
               title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}

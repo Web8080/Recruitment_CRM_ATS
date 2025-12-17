@@ -35,9 +35,10 @@ import {
   Edit24Regular,
   Delete24Regular,
 } from '@fluentui/react-icons'
-import { candidateService, CandidateRequest, aiService, ParsedResume } from '../services/api'
+import { candidateService, CandidateRequest, aiService, ParsedResume, Candidate } from '../services/api'
 import FileUpload from '../components/FileUpload'
 import { toast } from '../components/Toast'
+import { formatPhoneForDisplay } from '../utils/phoneFormatter'
 
 const useStyles = makeStyles({
   container: {
@@ -142,10 +143,14 @@ const useStyles = makeStyles({
 
 export default function Candidates() {
   const styles = useStyles()
+  const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [parsedData, setParsedData] = useState<ParsedResume | null>(null)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [statusFilter, setStatusFilter] = useState('')
+  const [sourceFilter, setSourceFilter] = useState('')
   const [formData, setFormData] = useState<CandidateRequest>({
     firstName: '',
     lastName: '',
@@ -153,9 +158,9 @@ export default function Candidates() {
     phone: '',
   })
 
-  const { data: candidates = [], isLoading } = useQuery({
-    queryKey: ['candidates'],
-    queryFn: candidateService.getAll,
+  const { data: candidates = [], isLoading } = useQuery<Candidate[]>({
+    queryKey: ['candidates', { search: searchQuery, status: statusFilter, source: sourceFilter }],
+    queryFn: () => candidateService.getAll({ search: searchQuery, status: statusFilter || undefined, source: sourceFilter || undefined }),
   })
 
   const createMutation = useMutation({
@@ -165,6 +170,21 @@ export default function Candidates() {
       setIsDialogOpen(false)
       setFormData({ firstName: '', lastName: '', email: '', phone: '' })
       setParsedData(null)
+      toast.success('Candidate created successfully')
+    },
+    onError: () => {
+      toast.error('Failed to create candidate')
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: candidateService.delete,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['candidates'] })
+      toast.success('Candidate deleted successfully')
+    },
+    onError: () => {
+      toast.error('Failed to delete candidate')
     },
   })
 
@@ -271,6 +291,7 @@ export default function Candidates() {
               <TableHeaderCell>Name</TableHeaderCell>
               <TableHeaderCell>Email</TableHeaderCell>
               <TableHeaderCell>Phone</TableHeaderCell>
+              <TableHeaderCell>Experience</TableHeaderCell>
               <TableHeaderCell>Status</TableHeaderCell>
               <TableHeaderCell>Source</TableHeaderCell>
               <TableHeaderCell>Actions</TableHeaderCell>
@@ -279,13 +300,13 @@ export default function Candidates() {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={6} style={{ textAlign: 'center', padding: tokens.spacingVerticalXXL }}>
+                <TableCell colSpan={7} style={{ textAlign: 'center', padding: tokens.spacingVerticalXXL }}>
                   <Spinner size="medium" />
                 </TableCell>
               </TableRow>
             ) : candidates.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6}>
+                <TableCell colSpan={7}>
                   <div className={styles.emptyState}>
                     <Person24Regular style={{ fontSize: '48px', marginBottom: tokens.spacingVerticalM }} />
                     <Text size={400}>No candidates found</Text>
@@ -310,7 +331,22 @@ export default function Candidates() {
                     </Button>
                   </TableCell>
                   <TableCell>{candidate.email}</TableCell>
-                  <TableCell>{candidate.phone || '-'}</TableCell>
+                  <TableCell>{candidate.phone ? formatPhoneForDisplay(candidate.phone) : '-'}</TableCell>
+                  <TableCell>
+                    {candidate.experience ? (
+                      <Text size={300}>
+                        {Array.isArray(candidate.experience) 
+                          ? candidate.experience.map((exp: any, idx: number) => 
+                              `${exp.position || 'N/A'} at ${exp.company || 'N/A'}${exp.duration ? ` (${exp.duration})` : ''}`
+                            ).join(', ')
+                          : typeof candidate.experience === 'string'
+                          ? candidate.experience.substring(0, 50) + (candidate.experience.length > 50 ? '...' : '')
+                          : 'N/A'}
+                      </Text>
+                    ) : (
+                      <Text size={300} style={{ color: tokens.colorNeutralForeground3 }}>-</Text>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <Badge
                       appearance={candidate.status === 'Active' ? 'filled' : 'outline'}
@@ -321,7 +357,7 @@ export default function Candidates() {
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Badge appearance="outline">{candidate.source || '-'}</Badge>
+                    <Badge appearance="outline">{candidate.source || 'Manual'}</Badge>
                   </TableCell>
                   <TableCell>
                     <div style={{ display: 'flex', gap: tokens.spacingHorizontalXS }}>

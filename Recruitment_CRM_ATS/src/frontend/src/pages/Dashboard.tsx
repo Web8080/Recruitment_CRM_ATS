@@ -13,7 +13,7 @@ import {
   Sparkle24Filled,
 } from '@fluentui/react-icons'
 import { useQuery } from '@tanstack/react-query'
-import { candidateService } from '../services/api'
+import { candidateService, Candidate } from '../services/api'
 
 const useStyles = makeStyles({
   container: {
@@ -150,9 +150,9 @@ const useStyles = makeStyles({
 export default function Dashboard() {
   const styles = useStyles()
 
-  const { data: candidates = [], isLoading: candidatesLoading } = useQuery({
+  const { data: candidates = [], isLoading: candidatesLoading } = useQuery<Candidate[]>({
     queryKey: ['candidates'],
-    queryFn: candidateService.getAll,
+    queryFn: () => candidateService.getAll(),
   })
 
   const stats = [
@@ -182,7 +182,7 @@ export default function Dashboard() {
     },
     {
       label: 'AI Processed',
-      value: candidates.filter((c: any) => c.createdAt).length.toString(),
+      value: candidates.filter((c) => c.createdAt).length.toString(),
       icon: Sparkle24Filled,
       color: tokens.colorPalettePurpleForeground2,
       change: 'Resumes parsed',

@@ -11,18 +11,11 @@ import {
   Field,
   Badge,
   Spinner,
-  Dialog,
-  DialogSurface,
-  DialogTitle,
-  DialogBody,
-  DialogActions,
-  DialogContent,
 } from '@fluentui/react-components'
 import {
   ArrowLeft24Regular,
   Edit24Regular,
   Delete24Regular,
-  Person24Regular,
 } from '@fluentui/react-icons'
 import { candidateService } from '../services/api'
 import { toast } from '../components/Toast'

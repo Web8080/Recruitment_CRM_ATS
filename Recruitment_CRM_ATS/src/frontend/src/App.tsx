@@ -21,14 +21,77 @@ function App() {
         <Router>
           <Routes>
             <Route path="/login" element={<Login />} />
-            <Route path="/" element={<PrivateRoute><Navigate to="/dashboard" replace /></PrivateRoute>} />
-            <Route path="/dashboard" element={<PrivateRoute><Layout><Dashboard /></Layout></PrivateRoute>} />
-            <Route path="/candidates" element={<PrivateRoute><Layout><Candidates /></Layout></PrivateRoute>} />
-            <Route path="/candidates/:id" element={<PrivateRoute><Layout><CandidateDetail /></Layout></PrivateRoute>} />
-            <Route path="/jobs" element={<PrivateRoute><Layout><Jobs /></Layout></PrivateRoute>} />
-            <Route path="/applications" element={<PrivateRoute><Layout><Applications /></Layout></PrivateRoute>} />
-            <Route path="/ai-services" element={<PrivateRoute><Layout><AIServices /></Layout></PrivateRoute>} />
-            <Route path="/analytics" element={<PrivateRoute><Layout><Analytics /></Layout></PrivateRoute>} />
+            <Route path="/" element={<Navigate to="/login" replace />} />
+            <Route
+              path="/dashboard"
+              element={
+                <PrivateRoute>
+                  <Layout>
+                    <Dashboard />
+                  </Layout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/candidates"
+              element={
+                <PrivateRoute>
+                  <Layout>
+                    <Candidates />
+                  </Layout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/candidates/:id"
+              element={
+                <PrivateRoute>
+                  <Layout>
+                    <CandidateDetail />
+                  </Layout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/jobs"
+              element={
+                <PrivateRoute>
+                  <Layout>
+                    <Jobs />
+                  </Layout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/applications"
+              element={
+                <PrivateRoute>
+                  <Layout>
+                    <Applications />
+                  </Layout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/ai-services"
+              element={
+                <PrivateRoute>
+                  <Layout>
+                    <AIServices />
+                  </Layout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/analytics"
+              element={
+                <PrivateRoute>
+                  <Layout>
+                    <Analytics />
+                  </Layout>
+                </PrivateRoute>
+              }
+            />
           </Routes>
         </Router>
       </AuthProvider>

@@ -32,7 +32,7 @@ import {
   Search24Regular,
   Briefcase24Regular,
 } from '@fluentui/react-icons'
-import { jobService, Job } from '../services/api'
+import { jobService, Job, JobRequest } from '../services/api'
 import { toast } from '../components/Toast'
 
 const useStyles = makeStyles({
@@ -106,7 +106,18 @@ export default function Jobs() {
   })
 
   const createMutation = useMutation({
-    mutationFn: (job: Partial<Job>) => jobService.create(job),
+    mutationFn: (job: Partial<Job>) => {
+      const jobRequest: JobRequest = {
+        title: job.title || '',
+        department: job.department || '',
+        location: job.location || '',
+        description: job.description || '',
+        requirements: job.requirements,
+        status: job.status,
+        closingDate: job.closingDate,
+      }
+      return jobService.create(jobRequest)
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['jobs'] })
       toast.success('Job created successfully')

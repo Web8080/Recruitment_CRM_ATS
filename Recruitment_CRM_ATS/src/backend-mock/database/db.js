@@ -69,7 +69,7 @@ class Database {
         firstName,
         lastName,
         email: `${firstName.toLowerCase()}.${lastName.toLowerCase()}@email.com`,
-        phone: `+1-555-${String(1001 + i).padStart(4, '0')}`,
+        phone: `+44 7${String(100 + (i % 900)).padStart(3, '0')} ${String(100 + (i % 900)).padStart(3, '0')} ${String(100 + (i % 900)).padStart(3, '0')}`,
         status: statuses[i],
         source: sources[i],
         createdAt: new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString(),

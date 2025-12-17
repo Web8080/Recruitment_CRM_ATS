@@ -25,13 +25,24 @@ export interface Candidate {
   email: string
   phone?: string
   status: string
+  source?: string
   createdAt?: string
   updatedAt?: string
-  skills?: string
-  experience?: string
-  education?: string
+  skills?: string | string[]
+  experience?: string | Array<{
+    company: string
+    position: string
+    duration: string
+    description?: string
+  }>
+  education?: string | Array<{
+    institution: string
+    degree: string
+    year?: string
+  }>
   summary?: string
   resumeUrl?: string
+  matchScore?: number
 }
 
 export interface CandidateRequest {
@@ -203,78 +214,6 @@ export const applicationService = {
 }
 
 export const authService = {
-  login: async (credentials: LoginRequest): Promise<{ token: string; user: User }> => {
-    const response = await apiClient.post<{ token: string; user: User }>('/auth/login', credentials)
-    return response.data
-  },
-
-  register: async (userData: RegisterRequest): Promise<{ token: string; user: User }> => {
-    const response = await apiClient.post<{ token: string; user: User }>('/auth/register', userData)
-    return response.data
-  },
-}
-
-export interface ParsedResume {
-  fullName?: string
-  firstName?: string
-  lastName?: string
-  email?: string
-  phone?: string
-  skills?: string[]
-  experience?: Array<{
-    company: string
-    position: string
-    duration: string
-    description?: string
-  }>
-  education?: Array<{
-    institution: string
-    degree: string
-    year?: string
-  }>
-  summary?: string
-}
-
-export interface Job {
-  id: string
-  title: string
-  department: string
-  location: string
-  status: string
-  description?: string
-  requirements?: string
-  salaryMin?: number
-  salaryMax?: number
-  employmentType?: string
-  openPositions?: number
-  createdAt?: string
-  updatedAt?: string
-}
-
-export interface Application {
-  id: string
-  candidateId: string
-  jobId: string
-  status: string
-  appliedAt: string
-  matchScore?: number
-  candidate?: Candidate
-  job?: Job
-}
-
-export interface Analytics {
-  totalCandidates: number
-  activeCandidates: number
-  hiredCandidates: number
-  totalJobs: number
-  openJobs: number
-  totalApplications: number
-  statusDistribution: Record<string, number>
-  sourceDistribution: Record<string, number>
-  monthlyTrends: Record<string, number>
-}
-
-export const authService = {
   login: async (email: string, password: string) => {
     const response = await apiClient.post('/auth/login', { email, password })
     if (response.data.token) {
@@ -308,63 +247,37 @@ export const authService = {
   },
 }
 
-export const jobService = {
-  getAll: async (filters?: { status?: string; search?: string }): Promise<Job[]> => {
-    const params = new URLSearchParams()
-    if (filters?.status) params.append('status', filters.status)
-    if (filters?.search) params.append('search', filters.search)
-    const response = await apiClient.get<Job[]>(`/jobs?${params.toString()}`)
-    return response.data
-  },
-
-  getById: async (id: string): Promise<Job> => {
-    const response = await apiClient.get<Job>(`/jobs/${id}`)
-    return response.data
-  },
-
-  create: async (job: Partial<Job>): Promise<Job> => {
-    const response = await apiClient.post<Job>('/jobs', job)
-    return response.data
-  },
-
-  update: async (id: string, job: Partial<Job>): Promise<Job> => {
-    const response = await apiClient.put<Job>(`/jobs/${id}`, job)
-    return response.data
-  },
-
-  delete: async (id: string): Promise<void> => {
-    await apiClient.delete(`/jobs/${id}`)
-  },
+export interface ParsedResume {
+  fullName?: string
+  firstName?: string
+  lastName?: string
+  email?: string
+  phone?: string
+  skills?: string[]
+  experience?: Array<{
+    company: string
+    position: string
+    duration: string
+    description?: string
+  }>
+  education?: Array<{
+    institution: string
+    degree: string
+    year?: string
+  }>
+  summary?: string
 }
 
-export const applicationService = {
-  getAll: async (filters?: { candidateId?: string; jobId?: string; status?: string }): Promise<Application[]> => {
-    const params = new URLSearchParams()
-    if (filters?.candidateId) params.append('candidateId', filters.candidateId)
-    if (filters?.jobId) params.append('jobId', filters.jobId)
-    if (filters?.status) params.append('status', filters.status)
-    const response = await apiClient.get<Application[]>(`/applications?${params.toString()}`)
-    return response.data
-  },
-
-  getById: async (id: string): Promise<Application> => {
-    const response = await apiClient.get<Application>(`/applications/${id}`)
-    return response.data
-  },
-
-  create: async (application: Partial<Application>): Promise<Application> => {
-    const response = await apiClient.post<Application>('/applications', application)
-    return response.data
-  },
-
-  update: async (id: string, application: Partial<Application>): Promise<Application> => {
-    const response = await apiClient.put<Application>(`/applications/${id}`, application)
-    return response.data
-  },
-
-  delete: async (id: string): Promise<void> => {
-    await apiClient.delete(`/applications/${id}`)
-  },
+export interface Analytics {
+  totalCandidates: number
+  activeCandidates: number
+  hiredCandidates: number
+  totalJobs: number
+  openJobs: number
+  totalApplications: number
+  statusDistribution: Record<string, number>
+  sourceDistribution: Record<string, number>
+  monthlyTrends: Record<string, number>
 }
 
 export const analyticsService = {

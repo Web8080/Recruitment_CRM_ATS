@@ -6,6 +6,7 @@ const mammoth = require('mammoth');
 const fs = require('fs');
 const path = require('path');
 const db = require('./database/db');
+const jobBoards = require('./integrations/jobBoards');
 const app = express();
 const PORT = 7071;
 
@@ -24,6 +25,50 @@ const upload = multer({
 
 app.use(cors());
 app.use(express.json());
+
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({
+    message: 'Recruitment CRM/ATS Backend API',
+    version: '1.0.0',
+    status: 'running',
+    baseUrl: '/api',
+    documentation: 'All API endpoints are under /api',
+    endpoints: {
+      health: 'GET /api',
+      auth: {
+        login: 'POST /api/auth/login',
+        register: 'POST /api/auth/register'
+      },
+      candidates: 'GET /api/candidates',
+      jobs: 'GET /api/jobs',
+      applications: 'GET /api/applications',
+      analytics: 'GET /api/analytics',
+      ai: {
+        parseResume: 'POST /api/ai/parse-resume',
+        parseResumeFile: 'POST /api/ai/parse-resume-file',
+        matchCandidate: 'POST /api/ai/match-candidate'
+      }
+    }
+  });
+});
+
+// Health check endpoint
+app.get('/api', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    message: 'Recruitment CRM/ATS API is running',
+    version: '1.0.0',
+    endpoints: {
+      auth: '/api/auth/login, /api/auth/register',
+      candidates: '/api/candidates',
+      jobs: '/api/jobs',
+      applications: '/api/applications',
+      analytics: '/api/analytics',
+      ai: '/api/ai/parse-resume, /api/ai/parse-resume-file, /api/ai/match-candidate'
+    }
+  });
+});
 
 // Database is initialized in db.js with 30 sample candidates
 // PLACEHOLDER: Replace with actual database connection in production
@@ -197,7 +242,18 @@ app.post('/api/candidates', authenticateToken, async (req, res) => {
       return res.status(429).json({ error: 'Rate limit exceeded' });
     }
     
-    const candidate = await db.createCandidate(req.body);
+    // Extract source from URL if provided
+    let source = req.body.source || 'Manual';
+    if (req.body.applicationUrl) {
+      source = jobBoards.extractSourceFromUrl(req.body.applicationUrl) || source;
+    }
+    
+    const candidateData = {
+      ...req.body,
+      source: source
+    };
+    
+    const candidate = await db.createCandidate(candidateData);
     res.status(201).json(candidate);
   } catch (error) {
     console.error('Error creating candidate:', error);
@@ -271,6 +327,20 @@ app.post('/api/jobs', authenticateToken, async (req, res) => {
     }
     
     const job = await db.createJob(req.body);
+    
+    // Auto-post to job boards if enabled
+    const autoPost = req.body.autoPostToBoards !== false; // Default to true
+    if (autoPost && job.status === 'Open') {
+      try {
+        const boardResults = await jobBoards.postToAllBoards(job, ['linkedin', 'indeed']);
+        job.jobBoardUrls = boardResults;
+        console.log('Job posted to boards:', boardResults);
+      } catch (error) {
+        console.error('Error posting to job boards:', error);
+        // Don't fail job creation if board posting fails
+      }
+    }
+    
     res.status(201).json(job);
   } catch (error) {
     console.error('Error creating job:', error);
@@ -546,7 +616,51 @@ ${jobDescription}`,
     }
 
     const data = await response.json();
-    res.json({ matchAnalysis: data.response, timestamp: new Date().toISOString() });
+    
+    // Parse AI response to extract match score and breakdown
+    let matchScore = 0;
+    let breakdown = {
+      skillsMatch: 0,
+      experienceMatch: 0,
+      educationMatch: 0,
+      keywordsMatch: 0
+    };
+    
+    try {
+      // Try to extract JSON from AI response
+      const responseText = data.response || '';
+      const jsonMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[0]);
+        matchScore = parsed.matchScore || parsed.score || 0;
+        breakdown = parsed.breakdown || breakdown;
+      } else {
+        // Fallback: Calculate basic score from keywords
+        const profileLower = candidateProfile.toLowerCase();
+        const jobLower = jobDescription.toLowerCase();
+        const commonWords = profileLower.split(/\s+/).filter(word => 
+          word.length > 3 && jobLower.includes(word)
+        );
+        matchScore = Math.min(100, Math.floor((commonWords.length / 10) * 100));
+        breakdown.keywordsMatch = matchScore;
+      }
+    } catch (parseError) {
+      // If parsing fails, use default calculation
+      const profileLower = candidateProfile.toLowerCase();
+      const jobLower = jobDescription.toLowerCase();
+      const commonWords = profileLower.split(/\s+/).filter(word => 
+        word.length > 3 && jobLower.includes(word)
+      );
+      matchScore = Math.min(100, Math.floor((commonWords.length / 10) * 100));
+      breakdown.keywordsMatch = matchScore;
+    }
+    
+    res.json({ 
+      matchScore,
+      breakdown,
+      analysis: data.response,
+      timestamp: new Date().toISOString() 
+    });
   } catch (error) {
     console.error('Error matching candidate:', error);
     
