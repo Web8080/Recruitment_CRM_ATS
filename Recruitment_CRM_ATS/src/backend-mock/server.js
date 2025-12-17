@@ -778,22 +778,30 @@ ${resumeText.substring(0, 8000)}
 Return ONLY valid JSON, nothing else.`;
 
   try {
-    const response = await fetch(`${ollamaUrl}/api/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model,
-        prompt,
-        stream: false,
-        options: { temperature: 0.3 }
-      })
-    });
+    // Create AbortController for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 90000); // 90 second timeout
+    
+    try {
+      const response = await fetch(`${ollamaUrl}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          prompt,
+          stream: false,
+          options: { temperature: 0.3 }
+        }),
+        signal: controller.signal
+      });
 
-    if (!response.ok) {
-      throw new Error(`Ollama API error: ${response.statusText}`);
-    }
+      clearTimeout(timeoutId);
 
-    const data = await response.json();
+      if (!response.ok) {
+        throw new Error(`Ollama API error: ${response.statusText}`);
+      }
+
+      const data = await response.json();
     let extractedText = data.response;
     
     extractedText = extractedText.trim();
@@ -803,9 +811,19 @@ Return ONLY valid JSON, nothing else.`;
       extractedText = extractedText.replace(/```\n?/g, '').trim();
     }
     
-    return JSON.parse(extractedText);
+      return JSON.parse(extractedText);
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      
+      // Check if it's a timeout error
+      if (fetchError.name === 'AbortError' || fetchError.cause?.code === 'UND_ERR_HEADERS_TIMEOUT') {
+        throw new Error('Ollama request timeout - the model is taking too long to respond. Try a smaller model or use OpenAI fallback.');
+      }
+      throw fetchError;
+    }
   } catch (error) {
-    if (process.env.OPENAI_API_KEY) {
+    // If Ollama fails, try OpenAI fallback
+    if (process.env.OPENAI_API_KEY && !error.message.includes('timeout')) {
       const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
