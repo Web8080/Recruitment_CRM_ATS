@@ -778,9 +778,11 @@ ${resumeText.substring(0, 8000)}
 Return ONLY valid JSON, nothing else.`;
 
   try {
-    // Create AbortController for timeout
+    // Create AbortController for timeout - increased to 120 seconds for Ollama
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 90000); // 90 second timeout
+    const timeoutId = setTimeout(() => controller.abort(), 120000); // 120 second timeout
+    
+    console.log(`Calling Ollama with model: ${model}, timeout: 120s`);
     
     try {
       const response = await fetch(`${ollamaUrl}/api/generate`, {
@@ -790,7 +792,10 @@ Return ONLY valid JSON, nothing else.`;
           model,
           prompt,
           stream: false,
-          options: { temperature: 0.3 }
+          options: { 
+            temperature: 0.3,
+            num_predict: 2000 // Limit tokens to speed up response
+          }
         }),
         signal: controller.signal
       });
@@ -802,28 +807,42 @@ Return ONLY valid JSON, nothing else.`;
       }
 
       const data = await response.json();
-    let extractedText = data.response;
-    
-    extractedText = extractedText.trim();
-    if (extractedText.startsWith('```json')) {
-      extractedText = extractedText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    } else if (extractedText.startsWith('```')) {
-      extractedText = extractedText.replace(/```\n?/g, '').trim();
-    }
+      let extractedText = data.response;
+      
+      if (!extractedText) {
+        throw new Error('Ollama returned empty response');
+      }
+      
+      extractedText = extractedText.trim();
+      if (extractedText.startsWith('```json')) {
+        extractedText = extractedText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      } else if (extractedText.startsWith('```')) {
+        extractedText = extractedText.replace(/```\n?/g, '').trim();
+      }
     
       return JSON.parse(extractedText);
     } catch (fetchError) {
       clearTimeout(timeoutId);
       
-      // Check if it's a timeout error
-      if (fetchError.name === 'AbortError' || fetchError.cause?.code === 'UND_ERR_HEADERS_TIMEOUT') {
-        throw new Error('Ollama request timeout - the model is taking too long to respond. Try a smaller model or use OpenAI fallback.');
+      // Check if it's a timeout error (including headers timeout)
+      if (fetchError.name === 'AbortError' || 
+          fetchError.cause?.code === 'UND_ERR_HEADERS_TIMEOUT' ||
+          fetchError.message?.includes('timeout') ||
+          fetchError.code === 'UND_ERR_HEADERS_TIMEOUT') {
+        console.warn('Ollama request timed out, trying OpenAI fallback...');
+        if (process.env.OPENAI_API_KEY) {
+          return await parseResumeWithOpenAI(resumeText, prompt);
+        }
+        throw new Error('Ollama request timeout after 120 seconds. The model is taking too long to respond. Consider: 1) Using a smaller model (llama2:7b), 2) Setting OPENAI_API_KEY for faster fallback, 3) Checking Ollama is running properly.');
       }
       throw fetchError;
     }
   } catch (error) {
     // If Ollama fails, try OpenAI fallback
-    if (process.env.OPENAI_API_KEY && !error.message.includes('timeout')) {
+    if (process.env.OPENAI_API_KEY) {
+      console.warn('Ollama failed, trying OpenAI fallback...', error.message);
+      return await parseResumeWithOpenAI(resumeText, prompt);
+    }
       const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
         method: 'POST',
         headers: {
