@@ -1,13 +1,33 @@
 const express = require('express');
 const cors = require('cors');
 const multer = require('multer');
-const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
 const fs = require('fs');
 const path = require('path');
 const db = require('./database/db');
 const jobBoards = require('./integrations/jobBoards');
 const interviewsRouter = require('./routes/interviews');
+
+// PDF parsing - handle different versions of pdf-parse
+let pdfParse;
+try {
+  const pdfParseModule = require('pdf-parse');
+  // pdf-parse v2.x exports an object with PDFParse property
+  // pdf-parse v1.x exports the function directly
+  if (typeof pdfParseModule === 'function') {
+    pdfParse = pdfParseModule;
+  } else if (pdfParseModule.PDFParse && typeof pdfParseModule.PDFParse === 'function') {
+    pdfParse = pdfParseModule.PDFParse;
+  } else if (pdfParseModule.default && typeof pdfParseModule.default === 'function') {
+    pdfParse = pdfParseModule.default;
+  } else {
+    // Fallback: try to use the module as-is
+    pdfParse = pdfParseModule;
+  }
+} catch (error) {
+  console.warn('pdf-parse not available, will use alternative methods:', error.message);
+  pdfParse = null;
+}
 const app = express();
 const PORT = 7071;
 

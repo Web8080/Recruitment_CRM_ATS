@@ -11,8 +11,8 @@
     "express": "^4.18.2",
     "mammoth": "^1.11.0",
     "multer": "^2.0.2",
-    "pdf-parse": "^2.4.5",
+    "pdf-parse": "^1.1.1",
+    "pdfjs-dist": "^3.11.174",
     "recharts": "^3.6.0"
   }
 }
-
