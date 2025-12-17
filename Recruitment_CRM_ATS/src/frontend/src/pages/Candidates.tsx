@@ -254,7 +254,7 @@ export default function Candidates() {
           firstName: extracted.firstName || extracted.fullName?.split(' ')[0] || '',
           lastName: extracted.lastName || extracted.fullName?.split(' ').slice(1).join(' ') || '',
           email: extracted.email || '',
-          phone: extracted.phone || '',
+          phone: extracted.phone ? formatPhoneForInput(extracted.phone) : '',
         })
       } else if (extracted.fullName) {
         const nameParts = extracted.fullName.split(' ')
@@ -262,7 +262,7 @@ export default function Candidates() {
           firstName: nameParts[0] || '',
           lastName: nameParts.slice(1).join(' ') || '',
           email: extracted.email || '',
-          phone: extracted.phone || '',
+          phone: extracted.phone ? formatPhoneForInput(extracted.phone) : '',
         })
       }
 
@@ -270,9 +270,11 @@ export default function Candidates() {
       if (selectedJobId) {
         await calculateMatchScore(extracted, selectedJobId)
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error parsing resume:', error)
-      toast.error('Failed to parse resume')
+      const errorMessage = error.response?.data?.details || error.response?.data?.error || error.message || 'Failed to parse resume'
+      const suggestion = error.response?.data?.suggestion || ''
+      toast.error(errorMessage + (suggestion ? ` - ${suggestion}` : ''))
     } finally {
       setIsUploading(false)
     }

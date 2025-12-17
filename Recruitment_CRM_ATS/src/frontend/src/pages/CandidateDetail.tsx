@@ -180,6 +180,7 @@ export default function CandidateDetail() {
                 <Input
                   value={formData.phone}
                   onChange={(_, data) => setFormData({ ...formData, phone: data.value })}
+                  placeholder="07xxx xxx xxx"
                 />
               </Field>
               <Field label="Status">

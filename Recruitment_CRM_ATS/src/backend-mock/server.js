@@ -610,6 +610,30 @@ app.post('/api/ai/parse-resume-file', upload.single('file'), async (req, res) =>
     const resumeText = await extractTextFromFile(filePath, req.file.mimetype);
     fs.unlinkSync(filePath);
     
+    // Check if Ollama is available before parsing
+    const ollamaUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+    let ollamaAvailable = false;
+    
+    try {
+      const healthCheck = await fetch(`${ollamaUrl}/api/tags`, { 
+        method: 'GET',
+        signal: AbortSignal.timeout(3000) // 3 second timeout
+      });
+      ollamaAvailable = healthCheck.ok;
+    } catch (healthError) {
+      console.warn('Ollama health check failed:', healthError.message);
+      ollamaAvailable = false;
+    }
+    
+    if (!ollamaAvailable && !process.env.OPENAI_API_KEY) {
+      return res.status(503).json({ 
+        error: 'Failed to process resume', 
+        details: 'Ollama service is not available. Please ensure Ollama is running.',
+        suggestion: 'Start Ollama: ollama serve (or install from https://ollama.ai)',
+        help: 'Alternatively, configure OPENAI_API_KEY in .env file for fallback'
+      });
+    }
+    
     const extractedData = await parseResumeWithAI(resumeText);
     
     res.json({
@@ -622,9 +646,23 @@ app.post('/api/ai/parse-resume-file', upload.single('file'), async (req, res) =>
     }
     
     console.error('Error parsing resume file:', error);
+    
+    const errorMessage = error.message || 'Unknown error';
+    const isOllamaError = errorMessage.includes('Ollama') || errorMessage.includes('fetch failed') || errorMessage.includes('ECONNREFUSED');
+    
+    if (isOllamaError && !process.env.OPENAI_API_KEY) {
+      return res.status(503).json({ 
+        error: 'Failed to process resume', 
+        details: 'Cannot connect to Ollama service. Please ensure Ollama is running on localhost:11434',
+        suggestion: 'Run: ollama serve (or check if Ollama is installed)',
+        help: 'Install from https://ollama.ai or configure OPENAI_API_KEY for fallback'
+      });
+    }
+    
     res.status(500).json({ 
-      error: 'Failed to parse resume', 
-      details: error.message 
+      error: 'Failed to process resume', 
+      details: errorMessage,
+      suggestion: isOllamaError ? 'Check Ollama: curl http://localhost:11434/api/tags' : 'Please try again'
     });
   }
 });

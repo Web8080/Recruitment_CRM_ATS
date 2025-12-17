@@ -30,6 +30,7 @@ import {
   Clock24Regular,
 } from '@fluentui/react-icons'
 import { toast } from '../components/Toast'
+import { applicationService, candidateService, jobService, Application, Candidate, Job } from '../services/api'
 
 const useStyles = makeStyles({
   container: {
@@ -107,12 +108,36 @@ export default function Calendar() {
   const [selectedDate, setSelectedDate] = useState(new Date())
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [formData, setFormData] = useState({
+    candidateId: '',
+    jobId: '',
     applicationId: '',
     interviewType: 'Video',
     scheduledAt: '',
     durationMinutes: 60,
     location: '',
     videoLink: '',
+  })
+
+  const { data: candidates = [] } = useQuery<Candidate[]>({
+    queryKey: ['candidates'],
+    queryFn: () => candidateService.getAll(),
+  })
+
+  const { data: jobs = [] } = useQuery<Job[]>({
+    queryKey: ['jobs'],
+    queryFn: () => jobService.getAll(),
+  })
+
+  const { data: applications = [] } = useQuery<Application[]>({
+    queryKey: ['applications'],
+    queryFn: () => applicationService.getAll(),
+  })
+
+  // Filter applications based on selected candidate and job
+  const filteredApplications = applications.filter(app => {
+    if (formData.candidateId && app.candidateId !== formData.candidateId) return false
+    if (formData.jobId && app.jobId !== formData.jobId) return false
+    return true
   })
 
   const { data: interviews = [], isLoading } = useQuery<Interview[]>({
@@ -173,9 +198,42 @@ export default function Calendar() {
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
   const handleSubmit = () => {
+    // If application is selected, use it. Otherwise, create application first
+    let applicationIdToUse = formData.applicationId
+    
+    if (!applicationIdToUse && formData.candidateId && formData.jobId) {
+      // Create application if not selected
+      applicationService.create({
+        candidateId: formData.candidateId,
+        jobId: formData.jobId,
+        status: 'Applied',
+      }).then(app => {
+        createMutation.mutate({
+          applicationId: app.id,
+          interviewType: formData.interviewType,
+          scheduledAt: new Date(formData.scheduledAt).toISOString(),
+          durationMinutes: formData.durationMinutes,
+          location: formData.location,
+          videoLink: formData.videoLink,
+        })
+      }).catch(() => {
+        toast.error('Failed to create application')
+      })
+      return
+    }
+
+    if (!applicationIdToUse) {
+      toast.error('Please select a candidate and job, or an existing application')
+      return
+    }
+
     createMutation.mutate({
-      ...formData,
+      applicationId: applicationIdToUse,
+      interviewType: formData.interviewType,
       scheduledAt: new Date(formData.scheduledAt).toISOString(),
+      durationMinutes: formData.durationMinutes,
+      location: formData.location,
+      videoLink: formData.videoLink,
     })
   }
 
@@ -317,12 +375,47 @@ export default function Calendar() {
           </DialogTitle>
           <DialogBody>
             <DialogContent>
-              <Field label="Application" required>
+              <Field label="Candidate" required>
+                <Select
+                  value={formData.candidateId}
+                  onChange={(_, data) => {
+                    setFormData({ ...formData, candidateId: data.value, applicationId: '' })
+                  }}
+                >
+                  <option value="">Select candidate...</option>
+                  {candidates.map((candidate) => (
+                    <option key={candidate.id} value={candidate.id}>
+                      {candidate.firstName} {candidate.lastName} ({candidate.email})
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Job" required>
+                <Select
+                  value={formData.jobId}
+                  onChange={(_, data) => {
+                    setFormData({ ...formData, jobId: data.value, applicationId: '' })
+                  }}
+                >
+                  <option value="">Select job...</option>
+                  {jobs.map((job) => (
+                    <option key={job.id} value={job.id}>
+                      {job.title} - {job.department} ({job.location})
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Application (Optional - auto-created if not selected)">
                 <Select
                   value={formData.applicationId}
                   onChange={(_, data) => setFormData({ ...formData, applicationId: data.value })}
                 >
-                  <option value="">Select application...</option>
+                  <option value="">Auto-create from candidate and job...</option>
+                  {filteredApplications.map((app) => (
+                    <option key={app.id} value={app.id}>
+                      {app.candidate?.firstName} {app.candidate?.lastName} → {app.job?.title}
+                    </option>
+                  ))}
                 </Select>
               </Field>
               <Field label="Interview Type" required>
@@ -378,7 +471,7 @@ export default function Calendar() {
               <Button
                 appearance="primary"
                 onClick={handleSubmit}
-                disabled={createMutation.isPending || !formData.applicationId || !formData.scheduledAt}
+                disabled={createMutation.isPending || (!formData.applicationId && (!formData.candidateId || !formData.jobId)) || !formData.scheduledAt}
               >
                 {createMutation.isPending ? 'Scheduling...' : 'Schedule Interview'}
               </Button>
