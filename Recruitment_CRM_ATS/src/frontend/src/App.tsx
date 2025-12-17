@@ -1,7 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom'
-import { FluentProvider, webLightTheme, webDarkTheme } from '@fluentui/react-components'
 import { AuthProvider } from './contexts/AuthContext'
-import { ThemeProvider, useTheme } from './contexts/ThemeContext'
+import { ThemeProvider } from './contexts/ThemeContext'
 import { ToastProvider } from './components/Toast'
 import Layout from './components/Layout'
 import Login from './pages/Login'
@@ -129,16 +128,6 @@ function App() {
             />
           </Routes>
         </Router>
-    </FluentProvider>
-  )
-}
-
-function App() {
-  return (
-    <ThemeProvider>
-      <AuthProvider>
-        <ToastProvider />
-        <AppContent />
       </AuthProvider>
     </ThemeProvider>
   )
