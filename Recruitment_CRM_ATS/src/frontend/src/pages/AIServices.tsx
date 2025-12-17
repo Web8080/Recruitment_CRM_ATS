@@ -132,9 +132,11 @@ export default function AIServices() {
       })
 
       toast.success('Resume parsed and matched successfully!')
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error processing resume:', error)
-      toast.error('Failed to process resume. Please try again.')
+      const errorMessage = error.response?.data?.details || error.response?.data?.error || error.message || 'Failed to process resume'
+      const suggestion = error.response?.data?.suggestion || error.response?.data?.help || ''
+      toast.error(errorMessage + (suggestion ? ` - ${suggestion}` : ''))
     } finally {
       setIsProcessing(false)
     }
