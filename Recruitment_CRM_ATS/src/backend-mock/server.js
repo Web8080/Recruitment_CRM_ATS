@@ -602,14 +602,103 @@ app.delete('/api/applications/:id', authenticateToken, async (req, res) => {
   }
 });
 
+// Extract text from PDF using Ollama multimodal (if vision model available)
+async function extractTextFromPDFWithOllama(filePath) {
+  try {
+    const ollamaUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+    
+    // Check if Ollama is available
+    const modelsResponse = await fetch(`${ollamaUrl}/api/tags`);
+    if (!modelsResponse.ok) {
+      throw new Error('Ollama not available');
+    }
+    
+    const models = await modelsResponse.json();
+    const visionModels = models.models?.filter(m => 
+      m.name && (m.name.includes('llava') || m.name.includes('vision') || m.name.includes('multimodal'))
+    ) || [];
+    
+    if (visionModels.length === 0) {
+      throw new Error('No vision models available. Install one: ollama pull llava');
+    }
+    
+    // Read PDF as base64
+    const pdfBuffer = fs.readFileSync(filePath);
+    const base64Pdf = pdfBuffer.toString('base64');
+    
+    // Use the first available vision model
+    const visionModel = visionModels[0].name;
+    
+    const response = await fetch(`${ollamaUrl}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: visionModel,
+        prompt: 'Extract all text content from this PDF document. Return only the raw text content, preserving structure. No explanations, just the text.',
+        images: [base64Pdf],
+        stream: false
+      })
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Ollama API error: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    return data.response || '';
+  } catch (error) {
+    console.warn('Ollama PDF extraction failed:', error.message);
+    throw error;
+  }
+}
+
 // AI endpoints
 async function extractTextFromFile(filePath, mimeType) {
   try {
     if (mimeType === 'application/pdf' || filePath.toLowerCase().endsWith('.pdf')) {
       const dataBuffer = fs.readFileSync(filePath);
-      // pdf-parse returns a promise, ensure we await it correctly
-      const data = await pdfParse(dataBuffer);
-      return data.text || '';
+      
+      // Method 1: Try pdf-parse (v1.1.1 exports function directly)
+      if (pdfParse && typeof pdfParse === 'function') {
+        try {
+          const data = await pdfParse(dataBuffer);
+          return data.text || '';
+        } catch (pdfError) {
+          console.warn('pdf-parse failed, trying pdfjs-dist:', pdfError.message);
+        }
+      }
+      
+      // Method 2: Try pdfjs-dist as fallback
+      try {
+        const pdfjs = require('pdfjs-dist/legacy/build/pdf.js');
+        const loadingTask = pdfjs.getDocument({ data: dataBuffer });
+        const pdfDocument = await loadingTask.promise;
+        let fullText = '';
+        
+        for (let pageNum = 1; pageNum <= pdfDocument.numPages; pageNum++) {
+          const page = await pdfDocument.getPage(pageNum);
+          const textContent = await page.getTextContent();
+          const pageText = textContent.items.map(item => item.str).join(' ');
+          fullText += pageText + '\n';
+        }
+        
+        return fullText.trim();
+      } catch (pdfjsError) {
+        console.warn('pdfjs-dist failed, trying Ollama:', pdfjsError.message);
+      }
+      
+      // Method 3: Try Ollama multimodal parsing (if vision model available)
+      try {
+        const ollamaText = await extractTextFromPDFWithOllama(filePath);
+        if (ollamaText && ollamaText.trim().length > 0) {
+          return ollamaText;
+        }
+      } catch (ollamaError) {
+        console.warn('Ollama PDF parsing not available:', ollamaError.message);
+      }
+      
+      throw new Error('All PDF parsing methods failed. Solutions: 1) Ensure pdf-parse is installed: npm install pdf-parse@1.1.1, 2) Install Ollama vision model: ollama pull llava, 3) Restart backend server');
+      
     } else if (mimeType.includes('wordprocessingml') || mimeType.includes('msword') || 
                filePath.toLowerCase().endsWith('.docx') || filePath.toLowerCase().endsWith('.doc')) {
       const result = await mammoth.extractRawText({ path: filePath });
