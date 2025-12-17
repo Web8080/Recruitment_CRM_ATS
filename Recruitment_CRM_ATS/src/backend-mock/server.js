@@ -7,6 +7,9 @@ const path = require('path');
 const db = require('./database/db');
 const jobBoards = require('./integrations/jobBoards');
 const interviewsRouter = require('./routes/interviews');
+const notesRouter = require('./routes/notes');
+const exportRouter = require('./routes/export');
+const aiEnhancedRouter = require('./routes/ai-enhanced');
 
 // PDF parsing - pdf-parse v1.1.1 exports function directly
 let pdfParse;
