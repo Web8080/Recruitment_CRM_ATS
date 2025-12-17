@@ -12,11 +12,9 @@ import {
   Divider,
 } from '@fluentui/react-components'
 import {
-  Lock24Regular,
   Person24Regular,
 } from '@fluentui/react-icons'
 import { useAuth } from '../contexts/AuthContext'
-import { authService } from '../services/api'
 import { toast } from '../components/Toast'
 
 const useStyles = makeStyles({
@@ -141,7 +139,6 @@ export default function Settings() {
         <CardHeader
           header={
             <div className={styles.sectionTitle}>
-              <Lock24Regular />
               <Text weight="semibold">Change Password</Text>
             </div>
           }
