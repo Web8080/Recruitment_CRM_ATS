@@ -584,17 +584,24 @@ app.delete('/api/applications/:id', authenticateToken, async (req, res) => {
 
 // AI endpoints
 async function extractTextFromFile(filePath, mimeType) {
-  if (mimeType === 'application/pdf') {
-    const dataBuffer = fs.readFileSync(filePath);
-    const data = await pdfParse(dataBuffer);
-    return data.text;
-  } else if (mimeType.includes('wordprocessingml') || mimeType.includes('msword')) {
-    const result = await mammoth.extractRawText({ path: filePath });
-    return result.value;
-  } else if (mimeType.includes('text')) {
-    return fs.readFileSync(filePath, 'utf8');
+  try {
+    if (mimeType === 'application/pdf' || filePath.toLowerCase().endsWith('.pdf')) {
+      const dataBuffer = fs.readFileSync(filePath);
+      // pdf-parse returns a promise, ensure we await it correctly
+      const data = await pdfParse(dataBuffer);
+      return data.text || '';
+    } else if (mimeType.includes('wordprocessingml') || mimeType.includes('msword') || 
+               filePath.toLowerCase().endsWith('.docx') || filePath.toLowerCase().endsWith('.doc')) {
+      const result = await mammoth.extractRawText({ path: filePath });
+      return result.value || '';
+    } else if (mimeType.includes('text') || filePath.toLowerCase().endsWith('.txt')) {
+      return fs.readFileSync(filePath, 'utf8');
+    }
+    throw new Error(`Unsupported file type: ${mimeType}`);
+  } catch (error) {
+    console.error('Error extracting text from file:', error);
+    throw new Error(`Failed to extract text: ${error.message}`);
   }
-  throw new Error('Unsupported file type');
 }
 
 async function parseResumeWithAI(resumeText) {

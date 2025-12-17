@@ -197,44 +197,49 @@ export default function Calendar() {
   const days = getDaysInMonth(selectedDate)
   const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
 
-  const handleSubmit = () => {
-    // If application is selected, use it. Otherwise, create application first
-    let applicationIdToUse = formData.applicationId
-    
-    if (!applicationIdToUse && formData.candidateId && formData.jobId) {
-      // Create application if not selected
-      applicationService.create({
-        candidateId: formData.candidateId,
-        jobId: formData.jobId,
-        status: 'Applied',
-      }).then(app => {
-        createMutation.mutate({
-          applicationId: app.id,
-          interviewType: formData.interviewType,
-          scheduledAt: new Date(formData.scheduledAt).toISOString(),
-          durationMinutes: formData.durationMinutes,
-          location: formData.location,
-          videoLink: formData.videoLink,
-        })
-      }).catch(() => {
-        toast.error('Failed to create application')
+  const handleSubmit = async () => {
+    try {
+      // Validate required fields
+      if (!formData.scheduledAt) {
+        toast.error('Please select a date and time for the interview')
+        return
+      }
+
+      // If application is selected, use it. Otherwise, create application first
+      let applicationIdToUse = formData.applicationId
+      
+      if (!applicationIdToUse && formData.candidateId && formData.jobId) {
+        // Create application if not selected
+        try {
+          const app = await applicationService.create({
+            candidateId: formData.candidateId,
+            jobId: formData.jobId,
+            status: 'Applied',
+          })
+          applicationIdToUse = app.id
+        } catch (error: any) {
+          toast.error(`Failed to create application: ${error.message || 'Unknown error'}`)
+          return
+        }
+      }
+
+      if (!applicationIdToUse) {
+        toast.error('Please select a candidate and job, or an existing application')
+        return
+      }
+
+      // Create the interview
+      createMutation.mutate({
+        applicationId: applicationIdToUse,
+        interviewType: formData.interviewType,
+        scheduledAt: new Date(formData.scheduledAt).toISOString(),
+        durationMinutes: formData.durationMinutes || 60,
+        location: formData.location || '',
+        videoLink: formData.videoLink || '',
       })
-      return
+    } catch (error: any) {
+      toast.error(`Failed to schedule interview: ${error.message || 'Unknown error'}`)
     }
-
-    if (!applicationIdToUse) {
-      toast.error('Please select a candidate and job, or an existing application')
-      return
-    }
-
-    createMutation.mutate({
-      applicationId: applicationIdToUse,
-      interviewType: formData.interviewType,
-      scheduledAt: new Date(formData.scheduledAt).toISOString(),
-      durationMinutes: formData.durationMinutes,
-      location: formData.location,
-      videoLink: formData.videoLink,
-    })
   }
 
   return (
