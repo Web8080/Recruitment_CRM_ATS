@@ -649,56 +649,103 @@ async function extractTextFromPDFWithOllama(filePath) {
 
 // AI endpoints
 async function extractTextFromFile(filePath, mimeType) {
+  const TIMEOUT_MS = 30000; // 30 seconds timeout
+  
   try {
     if (mimeType === 'application/pdf' || filePath.toLowerCase().endsWith('.pdf')) {
       const dataBuffer = fs.readFileSync(filePath);
+      const fileSizeMB = (dataBuffer.length / (1024 * 1024)).toFixed(2);
+      console.log(`Parsing PDF file (${fileSizeMB} MB)...`);
       
-      // Method 1: Try pdf-parse (v1.1.1 exports function directly)
+      // Method 1: Try pdf-parse (v1.1.1 exports function directly) with timeout
       if (pdfParse && typeof pdfParse === 'function') {
         try {
-          const data = await pdfParse(dataBuffer);
-          return data.text || '';
+          console.log('Attempting pdf-parse...');
+          const parsePromise = pdfParse(dataBuffer);
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error('pdf-parse timeout after 30 seconds')), TIMEOUT_MS)
+          );
+          
+          const data = await Promise.race([parsePromise, timeoutPromise]);
+          const text = data.text || '';
+          console.log(`pdf-parse successful, extracted ${text.length} characters`);
+          return text;
         } catch (pdfError) {
-          console.warn('pdf-parse failed, trying pdfjs-dist:', pdfError.message);
+          console.warn('pdf-parse failed:', pdfError.message);
+          if (pdfError.message.includes('timeout')) {
+            console.warn('pdf-parse timed out, trying alternative method...');
+          }
         }
       }
       
-      // Method 2: Try pdfjs-dist as fallback
+      // Method 2: Try pdfjs-dist as fallback with timeout
       try {
+        console.log('Attempting pdfjs-dist...');
         const pdfjs = require('pdfjs-dist/legacy/build/pdf.js');
-        const loadingTask = pdfjs.getDocument({ data: dataBuffer });
-        const pdfDocument = await loadingTask.promise;
+        
+        const loadingPromise = pdfjs.getDocument({ data: dataBuffer }).promise;
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('pdfjs-dist timeout after 30 seconds')), TIMEOUT_MS)
+        );
+        
+        const pdfDocument = await Promise.race([loadingPromise, timeoutPromise]);
         let fullText = '';
         
-        for (let pageNum = 1; pageNum <= pdfDocument.numPages; pageNum++) {
+        // Limit to first 10 pages to avoid timeout on large PDFs
+        const maxPages = Math.min(pdfDocument.numPages, 10);
+        console.log(`Extracting text from ${maxPages} of ${pdfDocument.numPages} pages...`);
+        
+        for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
           const page = await pdfDocument.getPage(pageNum);
           const textContent = await page.getTextContent();
           const pageText = textContent.items.map(item => item.str).join(' ');
           fullText += pageText + '\n';
         }
         
+        if (pdfDocument.numPages > 10) {
+          console.warn(`PDF has ${pdfDocument.numPages} pages, only extracted first 10 pages`);
+        }
+        
+        console.log(`pdfjs-dist successful, extracted ${fullText.length} characters`);
         return fullText.trim();
       } catch (pdfjsError) {
-        console.warn('pdfjs-dist failed, trying Ollama:', pdfjsError.message);
-      }
-      
-      // Method 3: Try Ollama multimodal parsing (if vision model available)
-      try {
-        const ollamaText = await extractTextFromPDFWithOllama(filePath);
-        if (ollamaText && ollamaText.trim().length > 0) {
-          return ollamaText;
+        console.warn('pdfjs-dist failed:', pdfjsError.message);
+        if (pdfjsError.message.includes('timeout')) {
+          console.warn('pdfjs-dist timed out, trying Ollama...');
         }
-      } catch (ollamaError) {
-        console.warn('Ollama PDF parsing not available:', ollamaError.message);
       }
       
-      throw new Error('All PDF parsing methods failed. Solutions: 1) Ensure pdf-parse is installed: npm install pdf-parse@1.1.1, 2) Install Ollama vision model: ollama pull llava, 3) Restart backend server');
+      // Method 3: Try Ollama multimodal parsing (if vision model available) - skip for now as it's slow
+      // Only try if file is small (< 5MB) to avoid timeout
+      if (dataBuffer.length < 5 * 1024 * 1024) {
+        try {
+          console.log('Attempting Ollama multimodal parsing...');
+          const ollamaText = await Promise.race([
+            extractTextFromPDFWithOllama(filePath),
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Ollama timeout after 30 seconds')), TIMEOUT_MS)
+            )
+          ]);
+          if (ollamaText && ollamaText.trim().length > 0) {
+            console.log(`Ollama successful, extracted ${ollamaText.length} characters`);
+            return ollamaText;
+          }
+        } catch (ollamaError) {
+          console.warn('Ollama PDF parsing failed:', ollamaError.message);
+        }
+      } else {
+        console.warn('PDF too large for Ollama parsing, skipping...');
+      }
+      
+      throw new Error(`PDF parsing failed. File size: ${fileSizeMB}MB. Solutions: 1) Try a smaller PDF file, 2) Ensure pdf-parse is installed: npm install pdf-parse@1.1.1, 3) Restart backend server`);
       
     } else if (mimeType.includes('wordprocessingml') || mimeType.includes('msword') || 
                filePath.toLowerCase().endsWith('.docx') || filePath.toLowerCase().endsWith('.doc')) {
+      console.log('Parsing Word document...');
       const result = await mammoth.extractRawText({ path: filePath });
       return result.value || '';
     } else if (mimeType.includes('text') || filePath.toLowerCase().endsWith('.txt')) {
+      console.log('Reading text file...');
       return fs.readFileSync(filePath, 'utf8');
     }
     throw new Error(`Unsupported file type: ${mimeType}`);
