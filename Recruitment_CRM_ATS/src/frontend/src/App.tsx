@@ -12,6 +12,8 @@ import Applications from './pages/Applications'
 import AIServices from './pages/AIServices'
 import Analytics from './pages/Analytics'
 import Calendar from './pages/Calendar'
+import JobBoardIntegration from './pages/JobBoardIntegration'
+import Settings from './pages/Settings'
 import PrivateRoute from './components/PrivateRoute'
 
 function App() {
@@ -99,6 +101,26 @@ function App() {
                 <PrivateRoute>
                   <Layout>
                     <Calendar />
+                  </Layout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/job-boards"
+              element={
+                <PrivateRoute>
+                  <Layout>
+                    <JobBoardIntegration />
+                  </Layout>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <PrivateRoute>
+                  <Layout>
+                    <Settings />
                   </Layout>
                 </PrivateRoute>
               }

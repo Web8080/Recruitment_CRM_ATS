@@ -315,6 +315,17 @@ class Database {
     return newUser;
   }
 
+  async getUserById(id) {
+    return this.users.find(u => u.id === id || u.id === parseInt(id));
+  }
+
+  async updateUser(id, updates) {
+    const index = this.users.findIndex(u => u.id === id || u.id === parseInt(id));
+    if (index === -1) return null;
+    this.users[index] = { ...this.users[index], ...updates, updatedAt: new Date().toISOString() };
+    return this.users[index];
+  }
+
   // Analytics methods
   async getAnalytics() {
     return {

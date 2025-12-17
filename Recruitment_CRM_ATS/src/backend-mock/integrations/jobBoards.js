@@ -114,16 +114,28 @@ class JobBoardIntegration {
    */
   generateTrackingUrl(board, jobId, boardJobId) {
     const baseUrl = process.env.FRONTEND_URL || 'http://localhost:5173'
+    const trackingCode = `JOB-${jobId}-${Date.now().toString(36).toUpperCase()}-${board.toUpperCase().substring(0, 3)}`
     const params = new URLSearchParams({
       job: jobId,
       source: board,
       boardJobId: boardJobId,
+      tracking_code: trackingCode,
       utm_source: board,
       utm_medium: 'job_board',
       utm_campaign: `job_${jobId}`,
     })
     
     return `${baseUrl}/apply?${params.toString()}`
+  }
+
+  /**
+   * Generate unique tracking code for a job
+   */
+  generateTrackingCode(jobId, source) {
+    const timestamp = Date.now().toString(36).toUpperCase()
+    const random = Math.random().toString(36).substring(2, 6).toUpperCase()
+    const sourceCode = source ? source.toUpperCase().substring(0, 3) : 'GEN'
+    return `JOB-${jobId}-${timestamp}-${sourceCode}-${random}`
   }
 
   /**

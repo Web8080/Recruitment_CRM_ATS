@@ -189,6 +189,72 @@ app.post('/api/auth/register', async (req, res) => {
   }
 });
 
+// Change password endpoint
+app.post('/api/auth/change-password', authenticateToken, async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Current password and new password are required' });
+    }
+    
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: 'New password must be at least 8 characters long' });
+    }
+    
+    const user = await db.getUserByEmail(req.user?.email || '');
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    // PLACEHOLDER: Verify current password
+    // const bcrypt = require('bcrypt');
+    // const isValid = await bcrypt.compare(currentPassword, user.passwordHash);
+    // if (!isValid) {
+    //   return res.status(401).json({ error: 'Current password is incorrect' });
+    // }
+    
+    // PLACEHOLDER: Hash new password
+    // const passwordHash = await bcrypt.hash(newPassword, 10);
+    // await db.updateUser(user.id, { passwordHash });
+    
+    // For now, just log the change (in production, actually update password)
+    console.log(`Password change requested for user: ${user.email}`);
+    
+    res.json({ message: 'Password changed successfully' });
+  } catch (error) {
+    console.error('Error changing password:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Source tracking algorithm
+function detectSource(req) {
+  // 1. Check URL parameters (for webhook/API calls)
+  const urlSource = req.query.source || req.query.utm_source;
+  if (urlSource) return urlSource;
+  
+  // 2. Check request body
+  const bodySource = req.body.source || req.body.utm_source;
+  if (bodySource) return bodySource;
+  
+  // 3. Check referrer header
+  const referrer = req.headers.referer || req.headers.referrer;
+  if (referrer) {
+    if (referrer.includes('linkedin.com')) return 'LinkedIn';
+    if (referrer.includes('indeed.com')) return 'Indeed';
+    if (referrer.includes('glassdoor.com')) return 'Glassdoor';
+    if (referrer.includes('monster.com')) return 'Monster';
+  }
+  
+  // 4. Check webhook source header
+  const webhookSource = req.headers['x-webhook-source'] || req.headers['x-source'];
+  if (webhookSource) return webhookSource;
+  
+  // 5. Default to Company Website
+  return 'Company Website';
+}
+
 // Authentication middleware (PLACEHOLDER: Use JWT in production)
 function authenticateToken(req, res, next) {
   const authHeader = req.headers['authorization'];
@@ -255,15 +321,11 @@ app.post('/api/candidates', authenticateToken, async (req, res) => {
       return res.status(429).json({ error: 'Rate limit exceeded' });
     }
     
-    // Extract source from URL if provided
-    let source = req.body.source || 'Manual';
-    if (req.body.applicationUrl) {
-      source = jobBoards.extractSourceFromUrl(req.body.applicationUrl) || source;
-    }
-    
+    // Auto-detect source if not provided
+    const detectedSource = detectSource(req);
     const candidateData = {
       ...req.body,
-      source: source
+      source: req.body.source || detectedSource,
     };
     
     const candidate = await db.createCandidate(candidateData);
@@ -473,8 +535,18 @@ app.post('/api/applications', authenticateToken, async (req, res) => {
     
     const applicationData = {
       ...req.body,
+      source: req.body.source || detectedSource,
+      trackingCode: trackingCode,
       matchScore: matchScore || null
     };
+    
+    // Update candidate source if creating new candidate
+    if (req.body.candidateId) {
+      const candidate = await db.getCandidateById(req.body.candidateId);
+      if (candidate && !candidate.source) {
+        await db.updateCandidate(req.body.candidateId, { source: detectedSource });
+      }
+    }
     
     const application = await db.createApplication(applicationData);
     res.status(201).json(application);

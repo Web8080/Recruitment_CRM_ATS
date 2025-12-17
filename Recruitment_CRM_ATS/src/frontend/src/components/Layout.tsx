@@ -23,6 +23,8 @@ import {
   WeatherMoon24Regular,
   WeatherSunny24Regular,
   CalendarMonth24Regular,
+  Settings24Regular,
+  Link24Regular,
 } from '@fluentui/react-icons'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
@@ -161,7 +163,9 @@ export default function Layout({ children }: LayoutProps) {
     { name: 'Applications', path: '/applications', icon: Document24Regular },
     { name: 'Calendar', path: '/calendar', icon: CalendarMonth24Regular },
     { name: 'AI Services', path: '/ai-services', icon: Sparkle24Regular },
+    { name: 'Job Boards', path: '/job-boards', icon: Link24Regular },
     { name: 'Analytics', path: '/analytics', icon: DataTrending24Regular },
+    { name: 'Settings', path: '/settings', icon: Settings24Regular },
   ]
 
   const handleLogout = () => {
