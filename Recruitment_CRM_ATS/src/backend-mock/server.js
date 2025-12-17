@@ -835,10 +835,34 @@ app.post('/api/ai/parse-resume-file', upload.single('file'), async (req, res) =>
     return res.status(400).json({ error: 'No file uploaded' });
   }
 
+  const filePath = req.file.path;
+  let resumeText = null;
+
   try {
-    const filePath = req.file.path;
-    const resumeText = await extractTextFromFile(filePath, req.file.mimetype);
-    fs.unlinkSync(filePath);
+    console.log(`Processing resume file: ${req.file.originalname} (${(req.file.size / 1024).toFixed(2)} KB)`);
+    
+    // Extract text with timeout handling (45 seconds)
+    const extractPromise = extractTextFromFile(filePath, req.file.mimetype);
+    const extractTimeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('File extraction timeout after 45 seconds')), 45000)
+    );
+    
+    resumeText = await Promise.race([extractPromise, extractTimeoutPromise]);
+    
+    // Clean up file immediately after extraction
+    if (fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
+    }
+    
+    if (!resumeText || resumeText.trim().length === 0) {
+      return res.status(400).json({ 
+        error: 'Failed to extract text from file',
+        details: 'The file appears to be empty or could not be parsed',
+        suggestion: 'Please ensure the file is a valid PDF, DOCX, DOC, or TXT file'
+      });
+    }
+    
+    console.log(`Extracted ${resumeText.length} characters from resume`);
     
     // Check if Ollama is available before parsing
     const ollamaUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
@@ -860,39 +884,61 @@ app.post('/api/ai/parse-resume-file', upload.single('file'), async (req, res) =>
         error: 'Failed to process resume', 
         details: 'Ollama service is not available. Please ensure Ollama is running.',
         suggestion: 'Start Ollama: ollama serve (or install from https://ollama.ai)',
-        help: 'Alternatively, configure OPENAI_API_KEY in .env file for fallback'
+        help: 'Alternatively, configure OPENAI_API_KEY in .env file for fallback',
+        extractedText: resumeText.substring(0, 500) // Return partial text for debugging
       });
     }
     
-    const extractedData = await parseResumeWithAI(resumeText);
+    // Parse with AI (with timeout - 60 seconds)
+    console.log('Parsing resume with AI...');
+    const parsePromise = parseResumeWithAI(resumeText);
+    const parseTimeoutPromise = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('AI parsing timeout after 60 seconds')), 60000)
+    );
+    
+    const extractedData = await Promise.race([parsePromise, parseTimeoutPromise]);
+    
+    console.log('Resume parsing completed successfully');
     
     res.json({
       extractedData,
-      rawText: resumeText
+      rawText: resumeText.substring(0, 1000) // Return first 1000 chars for preview
     });
   } catch (error) {
-    if (req.file && fs.existsSync(req.file.path)) {
-      fs.unlinkSync(req.file.path);
+    // Clean up file on error
+    if (filePath && fs.existsSync(filePath)) {
+      fs.unlinkSync(filePath);
     }
     
     console.error('Error parsing resume file:', error);
     
     const errorMessage = error.message || 'Unknown error';
+    const isTimeout = errorMessage.includes('timeout');
     const isOllamaError = errorMessage.includes('Ollama') || errorMessage.includes('fetch failed') || errorMessage.includes('ECONNREFUSED');
+    
+    if (isTimeout) {
+      return res.status(504).json({ 
+        error: 'Request timeout', 
+        details: 'The resume parsing took too long. This may be due to a large file or slow AI service.',
+        suggestion: 'Try with a smaller file or ensure Ollama/OpenAI is responding quickly',
+        extractedText: resumeText ? resumeText.substring(0, 500) : null
+      });
+    }
     
     if (isOllamaError && !process.env.OPENAI_API_KEY) {
       return res.status(503).json({ 
         error: 'Failed to process resume', 
         details: 'Cannot connect to Ollama service. Please ensure Ollama is running on localhost:11434',
         suggestion: 'Run: ollama serve (or check if Ollama is installed)',
-        help: 'Install from https://ollama.ai or configure OPENAI_API_KEY for fallback'
+        fallback: 'You can also configure OPENAI_API_KEY in .env for automatic fallback'
       });
     }
     
     res.status(500).json({ 
       error: 'Failed to process resume', 
       details: errorMessage,
-      suggestion: isOllamaError ? 'Check Ollama: curl http://localhost:11434/api/tags' : 'Please try again'
+      suggestion: 'Please check the file format and try again',
+      extractedText: resumeText ? resumeText.substring(0, 500) : null
     });
   }
 });
