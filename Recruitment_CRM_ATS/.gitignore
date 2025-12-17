@@ -70,3 +70,5 @@ local.settings.json
 *.pcfproj.user
 
 
+humaniod_robot_assitant/
+humanoid_robot_assistant/
