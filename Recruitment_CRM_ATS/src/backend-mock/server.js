@@ -757,6 +757,8 @@ async function extractTextFromFile(filePath, mimeType) {
 
 async function parseResumeWithAI(resumeText) {
   const ollamaUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+  // Use smaller model if specified, fallback to llama2
+  // Recommended: Set OLLAMA_MODEL=llama2:7b in .env for faster responses
   const model = process.env.OLLAMA_MODEL || 'llama2';
   
   // Shorten prompt to reduce processing time
