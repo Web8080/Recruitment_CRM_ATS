@@ -496,7 +496,6 @@ export default function Candidates() {
                   <Select
                     value={selectedJobId}
                     onChange={(_, data) => handleJobChange(data.value)}
-                    placeholder="Select a job to calculate match score..."
                   >
                     <option value="">-- No Job Selected --</option>
                     {jobs.map((job) => (
@@ -520,7 +519,7 @@ export default function Candidates() {
                     <Text weight="semibold">Match Score:</Text>
                     <Badge 
                       appearance="filled" 
-                      color={matchScore >= 80 ? 'success' : matchScore >= 60 ? 'warning' : 'error'}
+                      color={matchScore >= 80 ? 'success' : matchScore >= 60 ? 'warning' : 'danger'}
                       size="large"
                     >
                       {matchScore}%

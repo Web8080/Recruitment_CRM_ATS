@@ -178,10 +178,10 @@ export default function AIServices() {
     toast.success('Redirecting to create candidate with parsed data...')
   }
 
-  const getScoreColor = (score: number) => {
+  const getScoreColor = (score: number): 'success' | 'warning' | 'danger' => {
     if (score >= 80) return 'success'
     if (score >= 60) return 'warning'
-    return 'error'
+    return 'danger'
   }
 
   return (
@@ -209,7 +209,6 @@ export default function AIServices() {
             value={selectedJob}
             onChange={(_, data) => handleJobChange(data.value)}
             disabled={jobsLoading || isProcessing}
-            placeholder="Choose a job..."
           >
             <option value="">-- Select a Job --</option>
             {jobs.map((job) => (
@@ -242,7 +241,7 @@ export default function AIServices() {
         <div className={styles.uploadSection}>
           <FileUpload
             onFileUpload={handleFileUpload}
-            accept=".pdf,.docx,.doc,.txt"
+            accept={{ 'application/pdf': ['.pdf'], 'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'], 'application/msword': ['.doc'], 'text/plain': ['.txt'] }}
             disabled={!selectedJob || isProcessing}
           />
         </div>
@@ -302,7 +301,7 @@ export default function AIServices() {
               </Badge>
             </div>
             
-            <ProgressBar value={matchScore} max={100} color={getScoreColor(matchScore)} />
+            <ProgressBar value={matchScore} max={100} />
 
             {scoreBreakdown && (
               <div className={styles.scoreBreakdown}>

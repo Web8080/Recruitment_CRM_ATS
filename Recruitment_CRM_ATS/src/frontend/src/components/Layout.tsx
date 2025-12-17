@@ -22,6 +22,7 @@ import {
   Person24Regular,
   WeatherMoon24Regular,
   WeatherSunny24Regular,
+  CalendarMonth24Regular,
 } from '@fluentui/react-icons'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
