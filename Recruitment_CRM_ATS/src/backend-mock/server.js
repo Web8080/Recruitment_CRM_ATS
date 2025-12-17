@@ -759,7 +759,10 @@ async function parseResumeWithAI(resumeText) {
   const ollamaUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
   const model = process.env.OLLAMA_MODEL || 'llama2';
   
-  const prompt = `Extract the following information from this resume in valid JSON format only (no markdown, no code blocks, just JSON):
+  // Shorten prompt to reduce processing time
+  const resumePreview = resumeText.substring(0, 6000); // Reduced from 8000
+  
+  const prompt = `Extract resume info as JSON only:
 {
   "fullName": "string or null",
   "firstName": "string or null",
@@ -772,17 +775,43 @@ async function parseResumeWithAI(resumeText) {
   "summary": "string or null"
 }
 
-Resume text:
-${resumeText.substring(0, 8000)}
+Resume: ${resumePreview}
 
-Return ONLY valid JSON, nothing else.`;
+Return ONLY valid JSON, no markdown, no code blocks.`;
 
   try {
-    // Create AbortController for timeout - increased to 120 seconds for Ollama
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 120000); // 120 second timeout
+    // Warm up Ollama with a quick test first (optional but helps with cold starts)
+    try {
+      console.log('Warming up Ollama model...');
+      const warmupController = new AbortController();
+      const warmupTimeout = setTimeout(() => warmupController.abort(), 5000);
+      
+      await fetch(`${ollamaUrl}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model,
+          prompt: 'test',
+          stream: false,
+          options: { num_predict: 5 } // Very short response
+        }),
+        signal: warmupController.signal
+      }).catch(() => {}); // Ignore warmup errors
+      
+      clearTimeout(warmupTimeout);
+    } catch (warmupError) {
+      console.warn('Warmup failed, continuing anyway:', warmupError.message);
+    }
     
-    console.log(`Calling Ollama with model: ${model}, timeout: 120s`);
+    // Create AbortController for timeout - increased to 180 seconds for slow Ollama
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      console.warn('Ollama timeout approaching, aborting...');
+      controller.abort();
+    }, 180000); // 180 second timeout (3 minutes)
+    
+    const startTime = Date.now();
+    console.log(`Calling Ollama with model: ${model}, timeout: 180s, prompt length: ${prompt.length}`);
     
     try {
       const response = await fetch(`${ollamaUrl}/api/generate`, {
@@ -793,17 +822,22 @@ Return ONLY valid JSON, nothing else.`;
           prompt,
           stream: false,
           options: { 
-            temperature: 0.3,
-            num_predict: 2000 // Limit tokens to speed up response
+            temperature: 0.1, // Lower temperature for more consistent JSON
+            num_predict: 1500, // Reduced from 2000 to speed up
+            top_p: 0.9,
+            top_k: 40
           }
         }),
         signal: controller.signal
       });
 
       clearTimeout(timeoutId);
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+      console.log(`Ollama responded in ${elapsed}s`);
 
       if (!response.ok) {
-        throw new Error(`Ollama API error: ${response.statusText}`);
+        const errorText = await response.text().catch(() => '');
+        throw new Error(`Ollama API error: ${response.statusText} - ${errorText.substring(0, 100)}`);
       }
 
       const data = await response.json();
@@ -812,6 +846,8 @@ Return ONLY valid JSON, nothing else.`;
       if (!extractedText) {
         throw new Error('Ollama returned empty response');
       }
+      
+      console.log(`Ollama response length: ${extractedText.length} characters`);
       
       extractedText = extractedText.trim();
       if (extractedText.startsWith('```json')) {
@@ -823,17 +859,18 @@ Return ONLY valid JSON, nothing else.`;
       return JSON.parse(extractedText);
     } catch (fetchError) {
       clearTimeout(timeoutId);
+      const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
       
       // Check if it's a timeout error (including headers timeout)
       if (fetchError.name === 'AbortError' || 
           fetchError.cause?.code === 'UND_ERR_HEADERS_TIMEOUT' ||
           fetchError.message?.includes('timeout') ||
           fetchError.code === 'UND_ERR_HEADERS_TIMEOUT') {
-        console.warn('Ollama request timed out, trying OpenAI fallback...');
+        console.warn(`Ollama request timed out after ${elapsed}s, trying OpenAI fallback...`);
         if (process.env.OPENAI_API_KEY) {
           return await parseResumeWithOpenAI(resumeText, prompt);
         }
-        throw new Error('Ollama request timeout after 120 seconds. The model is taking too long to respond. Consider: 1) Using a smaller model (llama2:7b), 2) Setting OPENAI_API_KEY for faster fallback, 3) Checking Ollama is running properly.');
+        throw new Error(`Ollama request timeout after ${elapsed}s. Ollama is very slow. Solutions: 1) Use smaller model: ollama pull llama2:7b, 2) Set OPENAI_API_KEY for faster fallback, 3) Check Ollama performance: ollama ps`);
       }
       throw fetchError;
     }
