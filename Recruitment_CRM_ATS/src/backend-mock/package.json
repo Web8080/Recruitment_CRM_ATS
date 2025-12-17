@@ -1,0 +1,18 @@
+{
+  "name": "recruitment-crm-mock-backend",
+  "version": "1.0.0",
+  "description": "Mock backend server for development when .NET is not available",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "mammoth": "^1.11.0",
+    "multer": "^2.0.2",
+    "pdf-parse": "^2.4.5",
+    "recharts": "^3.6.0"
+  }
+}
+

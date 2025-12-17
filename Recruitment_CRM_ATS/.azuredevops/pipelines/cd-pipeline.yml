@@ -1,0 +1,243 @@
+trigger: none
+
+pr: none
+
+pool:
+  vmImage: 'windows-latest'
+
+parameters:
+  - name: environment
+    displayName: 'Target Environment'
+    type: string
+    default: 'staging'
+    values:
+      - staging
+      - production
+
+  - name: approveDeployment
+    displayName: 'Require Approval'
+    type: boolean
+    default: true
+
+variables:
+  - group: 'recruitment-crm-ats-variables'
+  - name: buildConfiguration
+    value: 'Release'
+
+stages:
+  - stage: PreDeployment
+    displayName: 'Pre-Deployment Checks'
+    jobs:
+      - job: PreDeployJob
+        displayName: 'Validate and Backup'
+        steps:
+          - task: AzureCLI@2
+            displayName: 'Backup production database'
+            condition: eq('${{ parameters.environment }}', 'production')
+            inputs:
+              azureSubscription: 'Azure-Service-Connection'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                echo "Backing up production database..."
+                # Database backup script placeholder
+
+          - task: AzureCLI@2
+            displayName: 'Validate infrastructure'
+            inputs:
+              azureSubscription: 'Azure-Service-Connection'
+              scriptType: 'bash'
+              scriptLocation: 'inlineScript'
+              inlineScript: |
+                echo "Validating infrastructure changes..."
+                # Infrastructure validation script placeholder
+
+  - stage: DeployStaging
+    displayName: 'Deploy to Staging'
+    dependsOn: PreDeployment
+    condition: succeeded()
+    jobs:
+      - deployment: DeployStagingJob
+        displayName: 'Deploy Application'
+        environment: 'staging'
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - task: DownloadBuildArtifacts@0
+                  displayName: 'Download build artifacts'
+                  inputs:
+                    buildType: 'current'
+                    downloadType: 'specific'
+                    itemPattern: '**/*'
+
+                - task: AzureFunctionApp@1
+                  displayName: 'Deploy Azure Functions'
+                  inputs:
+                    azureSubscription: 'Azure-Service-Connection'
+                    appType: 'functionApp'
+                    appName: 'recruitment-crm-functions-staging'
+                    package: '$(Pipeline.Workspace)/drop/functions'
+
+                - task: AzureStaticWebApp@0
+                  displayName: 'Deploy Frontend'
+                  inputs:
+                    azureSubscription: 'Azure-Service-Connection'
+                    appLocation: 'src/frontend'
+                    outputLocation: 'dist'
+                    appName: 'recruitment-crm-frontend-staging'
+
+                - task: PowerShell@2
+                  displayName: 'Update Dataverse solution'
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      Write-Host "Deploying Dataverse solution..."
+                      # Dataverse deployment script placeholder
+
+                - task: PowerShell@2
+                  displayName: 'Run E2E tests'
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      Write-Host "Running E2E tests against staging..."
+                      # E2E test script placeholder
+
+  - stage: SecurityValidation
+    displayName: 'Security & Compliance'
+    dependsOn: DeployStaging
+    condition: succeeded()
+    jobs:
+      - job: SecurityJob
+        displayName: 'Security Checks'
+        steps:
+          - task: PowerShell@2
+            displayName: 'Run security tests'
+            inputs:
+              targetType: 'inline'
+              script: |
+                Write-Host "Running automated security tests..."
+                # Security testing script placeholder
+
+          - task: PowerShell@2
+            displayName: 'GDPR compliance check'
+            inputs:
+              targetType: 'inline'
+              script: |
+                Write-Host "Validating GDPR compliance..."
+                # GDPR validation script placeholder
+
+  - stage: Approval
+    displayName: 'Approval Gate'
+    dependsOn: SecurityValidation
+    condition: and(succeeded(), eq('${{ parameters.approveDeployment }}', true))
+    jobs:
+      - job: ApprovalJob
+        displayName: 'Wait for Approval'
+        pool: server
+        steps:
+          - task: ManualValidation@0
+            displayName: 'Manual Approval'
+            inputs:
+              notifyUsers: 'stakeholder@example.com'
+              instructions: 'Please review the staging deployment and approve for production'
+
+  - stage: DeployProduction
+    displayName: 'Deploy to Production'
+    dependsOn: 
+      - SecurityValidation
+      - Approval
+    condition: or(and(succeeded(), eq('${{ parameters.approveDeployment }}', false)), and(succeeded(), eq('${{ parameters.environment }}', 'production')))
+    jobs:
+      - deployment: DeployProductionJob
+        displayName: 'Deploy to Production'
+        environment: 'production'
+        strategy:
+          canary:
+            increments: [10, 25, 50, 100]
+            preDeploy:
+              steps:
+                - task: DownloadBuildArtifacts@0
+                  displayName: 'Download build artifacts'
+                  inputs:
+                    buildType: 'current'
+                    downloadType: 'specific'
+                    itemPattern: '**/*'
+            deploy:
+              steps:
+                - task: AzureFunctionApp@1
+                  displayName: 'Deploy Azure Functions (Canary)'
+                  inputs:
+                    azureSubscription: 'Azure-Service-Connection'
+                    appType: 'functionApp'
+                    appName: 'recruitment-crm-functions-prod'
+                    package: '$(Pipeline.Workspace)/drop/functions'
+                    deploymentMethod: 'auto'
+
+                - task: AzureStaticWebApp@0
+                  displayName: 'Deploy Frontend (Canary)'
+                  inputs:
+                    azureSubscription: 'Azure-Service-Connection'
+                    appLocation: 'src/frontend'
+                    outputLocation: 'dist'
+                    appName: 'recruitment-crm-frontend-prod'
+
+            routeTraffic:
+              steps:
+                - task: PowerShell@2
+                  displayName: 'Route traffic to canary'
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      Write-Host "Routing traffic to canary deployment..."
+            postRouteTraffic:
+              steps:
+                - task: PowerShell@2
+                  displayName: 'Monitor canary health'
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      Write-Host "Monitoring canary deployment health..."
+            on:
+              failure:
+                steps:
+                  - task: PowerShell@2
+                    displayName: 'Rollback deployment'
+                    inputs:
+                      targetType: 'inline'
+                      script: |
+                        Write-Host "Rolling back deployment due to failure..."
+
+  - stage: PostDeployment
+    displayName: 'Post-Deployment'
+    dependsOn: DeployProduction
+    condition: succeeded()
+    jobs:
+      - job: PostDeployJob
+        displayName: 'Post-Deployment Tasks'
+        steps:
+          - task: PowerShell@2
+            displayName: 'Run smoke tests'
+            inputs:
+              targetType: 'inline'
+              script: |
+                Write-Host "Running smoke tests in production..."
+                # Smoke test script placeholder
+
+          - task: PowerShell@2
+            displayName: 'Verify AI service connectivity'
+            inputs:
+              targetType: 'inline'
+              script: |
+                Write-Host "Verifying AI service connectivity..."
+                # AI service verification script placeholder
+
+          - task: PowerShell@2
+            displayName: 'Notify stakeholders'
+            inputs:
+              targetType: 'inline'
+              script: |
+                Write-Host "Sending deployment notification..."
+                # Notification script placeholder
+
+

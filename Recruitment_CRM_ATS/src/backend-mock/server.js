@@ -1,0 +1,749 @@
+const express = require('express');
+const cors = require('cors');
+const multer = require('multer');
+const pdfParse = require('pdf-parse');
+const mammoth = require('mammoth');
+const fs = require('fs');
+const path = require('path');
+const db = require('./database/db');
+const app = express();
+const PORT = 7071;
+
+const upload = multer({ 
+  dest: 'uploads/',
+  limits: { fileSize: 10 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/msword', 'text/plain'];
+    if (allowedTypes.includes(file.mimetype) || file.originalname.match(/\.(pdf|docx|doc|txt)$/i)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only PDF, DOCX, DOC, and TXT files are allowed.'));
+    }
+  }
+});
+
+app.use(cors());
+app.use(express.json());
+
+// Database is initialized in db.js with 30 sample candidates
+// PLACEHOLDER: Replace with actual database connection in production
+
+// Rate limiting (simple in-memory)
+const rateLimits = new Map();
+function checkRateLimit(identifier, maxRequests = 100) {
+  const now = Date.now();
+  const key = `${identifier}-${Math.floor(now / 60000)}`;
+  const count = rateLimits.get(key) || 0;
+  if (count >= maxRequests) return false;
+  rateLimits.set(key, count + 1);
+  return true;
+}
+
+// Analytics endpoint
+app.get('/api/analytics', authenticateToken, async (req, res) => {
+  try {
+    const analytics = await db.getAnalytics();
+    res.json(analytics);
+  } catch (error) {
+    console.error('Error fetching analytics:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Auth endpoints
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    const user = await db.getUserByEmail(email);
+    
+    if (!user || !user.isActive) {
+      return res.status(401).json({ error: 'Invalid email or password' });
+    }
+    
+    // PLACEHOLDER: In production, verify password hash with bcrypt
+    // const bcrypt = require('bcrypt');
+    // const isValid = await bcrypt.compare(password, user.passwordHash);
+    // if (!isValid) {
+    //   return res.status(401).json({ error: 'Invalid email or password' });
+    // }
+    
+    // PLACEHOLDER: Generate JWT token
+    // const jwt = require('jsonwebtoken');
+    // const token = jwt.sign(
+    //   { id: user.id, email: user.email, role: user.role },
+    //   process.env.JWT_SECRET,
+    //   { expiresIn: '24h' }
+    // );
+    
+    const token = `mock-jwt-token-${user.id}`;
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role
+      }
+    });
+  } catch (error) {
+    console.error('Error during login:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { email, password, firstName, lastName, role } = req.body;
+    
+    if (await db.getUserByEmail(email)) {
+      return res.status(400).json({ error: 'Email already registered' });
+    }
+    
+    // PLACEHOLDER: Hash password with bcrypt
+    // const bcrypt = require('bcrypt');
+    // const passwordHash = await bcrypt.hash(password, 10);
+    
+    const user = await db.createUser({
+      email,
+      passwordHash: '$2a$10$PlaceholderHash', // Replace with actual hash
+      firstName,
+      lastName,
+      role: role || 'Recruiter'
+    });
+    
+    // PLACEHOLDER: Generate JWT token
+    const token = `mock-jwt-token-${user.id}`;
+    
+    res.status(201).json({
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role
+      }
+    });
+  } catch (error) {
+    console.error('Error during registration:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Authentication middleware (PLACEHOLDER: Use JWT in production)
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  
+  if (!token) {
+    // For development, allow requests without auth
+    // In production, return 401
+    req.user = { id: 1, role: 'SuperAdmin' };
+    return next();
+  }
+  
+  // PLACEHOLDER: Verify JWT token
+  // const jwt = require('jsonwebtoken');
+  // try {
+  //   const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  //   req.user = decoded;
+  //   next();
+  // } catch (error) {
+  //   return res.status(403).json({ error: 'Invalid token' });
+  // }
+  
+  req.user = { id: 1, role: 'SuperAdmin' };
+  next();
+}
+
+// Candidate endpoints
+app.get('/api/candidates', authenticateToken, async (req, res) => {
+  try {
+    if (!checkRateLimit('candidates', 100)) {
+      return res.status(429).json({ error: 'Rate limit exceeded' });
+    }
+    
+    const filters = {
+      search: req.query.search,
+      status: req.query.status,
+      source: req.query.source
+    };
+    
+    const candidates = await db.getCandidates(filters);
+    res.json(candidates);
+  } catch (error) {
+    console.error('Error fetching candidates:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.get('/api/candidates/:id', authenticateToken, async (req, res) => {
+  try {
+    const candidate = await db.getCandidateById(req.params.id);
+    if (!candidate) {
+      return res.status(404).json({ error: 'Candidate not found' });
+    }
+    res.json(candidate);
+  } catch (error) {
+    console.error('Error fetching candidate:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/api/candidates', authenticateToken, async (req, res) => {
+  try {
+    if (!checkRateLimit('create-candidate', 50)) {
+      return res.status(429).json({ error: 'Rate limit exceeded' });
+    }
+    
+    const candidate = await db.createCandidate(req.body);
+    res.status(201).json(candidate);
+  } catch (error) {
+    console.error('Error creating candidate:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.put('/api/candidates/:id', authenticateToken, async (req, res) => {
+  try {
+    const candidate = await db.updateCandidate(req.params.id, req.body);
+    if (!candidate) {
+      return res.status(404).json({ error: 'Candidate not found' });
+    }
+    res.json(candidate);
+  } catch (error) {
+    console.error('Error updating candidate:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.delete('/api/candidates/:id', authenticateToken, async (req, res) => {
+  try {
+    const deleted = await db.deleteCandidate(req.params.id);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Candidate not found' });
+    }
+    res.json({ message: 'Candidate deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting candidate:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Job endpoints
+app.get('/api/jobs', authenticateToken, async (req, res) => {
+  try {
+    if (!checkRateLimit('jobs', 100)) {
+      return res.status(429).json({ error: 'Rate limit exceeded' });
+    }
+    
+    const filters = {
+      status: req.query.status,
+      search: req.query.search
+    };
+    
+    const jobs = await db.getJobs(filters);
+    res.json(jobs);
+  } catch (error) {
+    console.error('Error fetching jobs:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.get('/api/jobs/:id', authenticateToken, async (req, res) => {
+  try {
+    const job = await db.getJobById(req.params.id);
+    if (!job) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+    res.json(job);
+  } catch (error) {
+    console.error('Error fetching job:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/api/jobs', authenticateToken, async (req, res) => {
+  try {
+    if (!checkRateLimit('create-job', 50)) {
+      return res.status(429).json({ error: 'Rate limit exceeded' });
+    }
+    
+    const job = await db.createJob(req.body);
+    res.status(201).json(job);
+  } catch (error) {
+    console.error('Error creating job:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.put('/api/jobs/:id', authenticateToken, async (req, res) => {
+  try {
+    const job = await db.updateJob(req.params.id, req.body);
+    if (!job) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+    res.json(job);
+  } catch (error) {
+    console.error('Error updating job:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.delete('/api/jobs/:id', authenticateToken, async (req, res) => {
+  try {
+    const deleted = await db.deleteJob(req.params.id);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+    res.json({ message: 'Job deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting job:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Application endpoints
+app.get('/api/applications', authenticateToken, async (req, res) => {
+  try {
+    if (!checkRateLimit('applications', 100)) {
+      return res.status(429).json({ error: 'Rate limit exceeded' });
+    }
+    
+    const filters = {
+      candidateId: req.query.candidateId,
+      jobId: req.query.jobId,
+      status: req.query.status
+    };
+    
+    const applications = await db.getApplications(filters);
+    res.json(applications);
+  } catch (error) {
+    console.error('Error fetching applications:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.get('/api/applications/:id', authenticateToken, async (req, res) => {
+  try {
+    const applications = await db.getApplications({});
+    const application = applications.find(a => a.id === parseInt(req.params.id));
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+    res.json(application);
+  } catch (error) {
+    console.error('Error fetching application:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.post('/api/applications', authenticateToken, async (req, res) => {
+  try {
+    if (!checkRateLimit('create-application', 50)) {
+      return res.status(429).json({ error: 'Rate limit exceeded' });
+    }
+    
+    const application = await db.createApplication(req.body);
+    res.status(201).json(application);
+  } catch (error) {
+    console.error('Error creating application:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.put('/api/applications/:id', authenticateToken, async (req, res) => {
+  try {
+    const application = await db.updateApplication(req.params.id, req.body);
+    if (!application) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+    res.json(application);
+  } catch (error) {
+    console.error('Error updating application:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.delete('/api/applications/:id', authenticateToken, async (req, res) => {
+  try {
+    const deleted = await db.deleteApplication(req.params.id);
+    if (!deleted) {
+      return res.status(404).json({ error: 'Application not found' });
+    }
+    res.json({ message: 'Application deleted successfully' });
+  } catch (error) {
+    console.error('Error deleting application:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// AI endpoints
+async function extractTextFromFile(filePath, mimeType) {
+  if (mimeType === 'application/pdf') {
+    const dataBuffer = fs.readFileSync(filePath);
+    const data = await pdfParse(dataBuffer);
+    return data.text;
+  } else if (mimeType.includes('wordprocessingml') || mimeType.includes('msword')) {
+    const result = await mammoth.extractRawText({ path: filePath });
+    return result.value;
+  } else if (mimeType.includes('text')) {
+    return fs.readFileSync(filePath, 'utf8');
+  }
+  throw new Error('Unsupported file type');
+}
+
+async function parseResumeWithAI(resumeText) {
+  const ollamaUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+  const model = process.env.OLLAMA_MODEL || 'llama2';
+  
+  const prompt = `Extract the following information from this resume in valid JSON format only (no markdown, no code blocks, just JSON):
+{
+  "fullName": "string or null",
+  "firstName": "string or null",
+  "lastName": "string or null",
+  "email": "string or null",
+  "phone": "string or null",
+  "skills": ["string"],
+  "experience": [{"company": "string", "position": "string", "duration": "string", "description": "string"}],
+  "education": [{"institution": "string", "degree": "string", "year": "string"}],
+  "summary": "string or null"
+}
+
+Resume text:
+${resumeText.substring(0, 8000)}
+
+Return ONLY valid JSON, nothing else.`;
+
+  try {
+    const response = await fetch(`${ollamaUrl}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        prompt,
+        stream: false,
+        options: { temperature: 0.3 }
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Ollama API error: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    let extractedText = data.response;
+    
+    extractedText = extractedText.trim();
+    if (extractedText.startsWith('```json')) {
+      extractedText = extractedText.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    } else if (extractedText.startsWith('```')) {
+      extractedText = extractedText.replace(/```\n?/g, '').trim();
+    }
+    
+    return JSON.parse(extractedText);
+  } catch (error) {
+    if (process.env.OPENAI_API_KEY) {
+      const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: process.env.OPENAI_MODEL || 'gpt-4',
+          messages: [
+            { role: 'system', content: 'You are a helpful assistant specialized in recruitment. Extract resume information and return ONLY valid JSON, no markdown, no code blocks.' },
+            { role: 'user', content: prompt }
+          ],
+          max_tokens: 2000,
+          response_format: { type: 'json_object' }
+        })
+      });
+      
+      const openaiData = await openaiResponse.json();
+      return JSON.parse(openaiData.choices[0].message.content);
+    }
+    throw error;
+  }
+}
+
+app.post('/api/ai/parse-resume-file', upload.single('file'), async (req, res) => {
+  if (!req.file) {
+    return res.status(400).json({ error: 'No file uploaded' });
+  }
+
+  try {
+    const filePath = req.file.path;
+    const resumeText = await extractTextFromFile(filePath, req.file.mimetype);
+    fs.unlinkSync(filePath);
+    
+    const extractedData = await parseResumeWithAI(resumeText);
+    
+    res.json({
+      extractedData,
+      rawText: resumeText
+    });
+  } catch (error) {
+    if (req.file && fs.existsSync(req.file.path)) {
+      fs.unlinkSync(req.file.path);
+    }
+    
+    console.error('Error parsing resume file:', error);
+    res.status(500).json({ 
+      error: 'Failed to parse resume', 
+      details: error.message 
+    });
+  }
+});
+
+app.post('/api/ai/parse-resume', async (req, res) => {
+  const { resumeText } = req.body;
+  
+  if (!resumeText) {
+    return res.status(400).json({ error: 'Resume text is required' });
+  }
+
+  try {
+    const extractedData = await parseResumeWithAI(resumeText);
+    res.json({ extractedData, rawText: resumeText });
+  } catch (error) {
+    console.error('Error parsing resume:', error);
+    res.status(500).json({ error: 'AI service unavailable', details: error.message });
+  }
+});
+
+app.post('/api/ai/match-candidate', async (req, res) => {
+  const { candidateProfile, jobDescription } = req.body;
+  
+  if (!candidateProfile || !jobDescription) {
+    return res.status(400).json({ error: 'Candidate profile and job description are required' });
+  }
+
+  try {
+    const ollamaUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
+    const model = process.env.OLLAMA_MODEL || 'llama2';
+    
+    const response = await fetch(`${ollamaUrl}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model,
+        prompt: `Analyze the match between this candidate profile and job description. Provide a match score (0-100) and detailed analysis in JSON format.
+
+Candidate Profile:
+${candidateProfile}
+
+Job Description:
+${jobDescription}`,
+        stream: false
+      })
+    });
+
+    if (!response.ok) {
+      throw new Error(`Ollama API error: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    res.json({ matchAnalysis: data.response, timestamp: new Date().toISOString() });
+  } catch (error) {
+    console.error('Error matching candidate:', error);
+    
+    if (process.env.OPENAI_API_KEY) {
+      try {
+        const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+          },
+          body: JSON.stringify({
+            model: process.env.OPENAI_MODEL || 'gpt-4',
+            messages: [
+              { role: 'system', content: 'You are a helpful assistant specialized in recruitment and HR tasks.' },
+              { role: 'user', content: `Match this candidate to this job:\n\nCandidate: ${candidateProfile}\n\nJob: ${jobDescription}` }
+            ],
+            max_tokens: 2000
+          })
+        });
+        
+        const openaiData = await openaiResponse.json();
+        res.json({ matchAnalysis: openaiData.choices[0].message.content, timestamp: new Date().toISOString() });
+      } catch (fallbackError) {
+        res.status(500).json({ error: 'Both AI services failed', details: fallbackError.message });
+      }
+    } else {
+      res.status(500).json({ error: 'AI service unavailable', details: error.message });
+    }
+  }
+});
+
+// PLACEHOLDER: Azure Blob Storage integration
+app.post('/api/files/upload', authenticateToken, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+    
+    // PLACEHOLDER: Upload to Azure Blob Storage
+    // const { BlobServiceClient } = require('@azure/storage-blob');
+    // const blobServiceClient = BlobServiceClient.fromConnectionString(process.env.AZURE_STORAGE_CONNECTION_STRING);
+    // const containerClient = blobServiceClient.getContainerClient(process.env.AZURE_BLOB_CONTAINER_NAME || 'resumes');
+    // const blobName = `${Date.now()}-${req.file.originalname}`;
+    // const blockBlobClient = containerClient.getBlockBlobClient(blobName);
+    // await blockBlobClient.uploadFile(req.file.path);
+    // const url = blockBlobClient.url;
+    
+    // For now, return placeholder
+    res.json({
+      url: `https://placeholder.blob.core.windows.net/resumes/${req.file.originalname}`,
+      fileName: req.file.originalname,
+      fileSize: req.file.size,
+      message: 'PLACEHOLDER: File upload - configure Azure Blob Storage in production'
+    });
+  } catch (error) {
+    console.error('Error uploading file:', error);
+    res.status(500).json({ error: 'File upload failed' });
+  }
+});
+
+// PLACEHOLDER: Calendar integration endpoints
+app.post('/api/calendar/create-event', authenticateToken, async (req, res) => {
+  try {
+    const { title, startTime, endTime, attendees, description } = req.body;
+    
+    // PLACEHOLDER: Office365 Calendar integration
+    // const { Client } = require('@microsoft/microsoft-graph-client');
+    // const { ClientCredentialProvider } = require('@microsoft/microsoft-graph-client/authProviders/azureTokenCredentials');
+    // const { ClientSecretCredential } = require('@azure/identity');
+    // 
+    // const credential = new ClientSecretCredential(
+    //   process.env.AZURE_TENANT_ID,
+    //   process.env.OFFICE365_CLIENT_ID,
+    //   process.env.OFFICE365_CLIENT_SECRET
+    // );
+    // 
+    // const authProvider = new ClientCredentialProvider(credential);
+    // const client = Client.initWithMiddleware({ authProvider });
+    // 
+    // const event = {
+    //   subject: title,
+    //   start: { dateTime: startTime, timeZone: 'UTC' },
+    //   end: { dateTime: endTime, timeZone: 'UTC' },
+    //   attendees: attendees.map(email => ({ emailAddress: { address: email }, type: 'required' })),
+    //   body: { contentType: 'HTML', content: description }
+    // };
+    // 
+    // const createdEvent = await client.api('/me/calendar/events').post(event);
+    
+    // PLACEHOLDER: Google Calendar backup
+    // const { google } = require('googleapis');
+    // const oauth2Client = new google.auth.OAuth2(
+    //   process.env.GOOGLE_CLIENT_ID,
+    //   process.env.GOOGLE_CLIENT_SECRET,
+    //   process.env.GOOGLE_REDIRECT_URI
+    // );
+    // oauth2Client.setCredentials({ refresh_token: process.env.GOOGLE_REFRESH_TOKEN });
+    // const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
+    // 
+    // const event = {
+    //   summary: title,
+    //   start: { dateTime: startTime, timeZone: 'UTC' },
+    //   end: { dateTime: endTime, timeZone: 'UTC' },
+    //   attendees: attendees.map(email => ({ email })),
+    //   description: description
+    // };
+    // 
+    // const createdEvent = await calendar.events.insert({ calendarId: 'primary', resource: event });
+    
+    res.json({
+      eventId: 'placeholder-event-id',
+      office365EventId: null, // PLACEHOLDER
+      googleEventId: null, // PLACEHOLDER
+      message: 'PLACEHOLDER: Calendar event - configure Office365/Google Calendar in production'
+    });
+  } catch (error) {
+    console.error('Error creating calendar event:', error);
+    res.status(500).json({ error: 'Failed to create calendar event' });
+  }
+});
+
+// PLACEHOLDER: Email automation endpoints
+app.post('/api/email/send', authenticateToken, async (req, res) => {
+  try {
+    const { to, subject, body, templateId } = req.body;
+    
+    // PLACEHOLDER: SendGrid integration
+    // const sgMail = require('@sendgrid/mail');
+    // sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+    // 
+    // const msg = {
+    //   to,
+    //   from: process.env.SENDGRID_FROM_EMAIL,
+    //   subject,
+    //   html: body
+    // };
+    // 
+    // await sgMail.send(msg);
+    
+    res.json({
+      messageId: 'placeholder-message-id',
+      status: 'sent',
+      message: 'PLACEHOLDER: Email sent - configure SendGrid in production'
+    });
+  } catch (error) {
+    console.error('Error sending email:', error);
+    res.status(500).json({ error: 'Failed to send email' });
+  }
+});
+
+// PLACEHOLDER: Export endpoint
+app.get('/api/export/candidates', authenticateToken, async (req, res) => {
+  try {
+    const candidates = await db.getCandidates(req.query);
+    
+    // PLACEHOLDER: Generate CSV/Excel
+    // const ExcelJS = require('exceljs');
+    // const workbook = new ExcelJS.Workbook();
+    // const worksheet = workbook.addWorksheet('Candidates');
+    // worksheet.columns = [
+    //   { header: 'First Name', key: 'firstName' },
+    //   { header: 'Last Name', key: 'lastName' },
+    //   { header: 'Email', key: 'email' },
+    //   { header: 'Status', key: 'status' }
+    // ];
+    // candidates.forEach(c => worksheet.addRow(c));
+    // 
+    // res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    // res.setHeader('Content-Disposition', 'attachment; filename=candidates.xlsx');
+    // await workbook.xlsx.write(res);
+    
+    // For now, return JSON
+    res.json(candidates);
+  } catch (error) {
+    console.error('Error exporting candidates:', error);
+    res.status(500).json({ error: 'Export failed' });
+  }
+});
+
+// Error handling middleware
+app.use((err, req, res, next) => {
+  console.error('Error:', err);
+  
+  // PLACEHOLDER: Log to Application Insights
+  // const appInsights = require('applicationinsights');
+  // appInsights.defaultClient.trackException({ exception: err });
+  
+  res.status(err.status || 500).json({
+    error: err.message || 'Internal server error',
+    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
+  });
+});
+
+app.listen(PORT, () => {
+  console.log(`Mock backend server running on http://localhost:${PORT}`);
+  console.log('AI Provider: Ollama (primary), OpenAI (fallback)');
+  console.log('PLACEHOLDERS: Database, Azure Blob, Calendar, Email, Monitoring');
+  console.log(`Sample data: ${db.candidates.length} candidates, ${db.jobs.length} jobs, ${db.applications.length} applications`);
+});

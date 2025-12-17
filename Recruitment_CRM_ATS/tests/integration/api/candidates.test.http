@@ -1,0 +1,36 @@
+### Integration Tests for Candidate API
+### TODO: Convert to Postman collection or use REST Client extension
+
+### Get all candidates
+GET http://localhost:7071/api/candidates
+Content-Type: application/json
+
+### Create a new candidate
+POST http://localhost:7071/api/candidates
+Content-Type: application/json
+
+{
+  "firstName": "John",
+  "lastName": "Doe",
+  "email": "john.doe@example.com",
+  "phone": "+1234567890"
+}
+
+### Parse resume using AI
+POST http://localhost:7071/api/ai/parse-resume
+Content-Type: application/json
+
+{
+  "resumeText": "John Doe\nSoftware Engineer\n5 years of experience in C# and .NET"
+}
+
+### Match candidate to job
+POST http://localhost:7071/api/ai/match-candidate
+Content-Type: application/json
+
+{
+  "candidateProfile": "Experienced software engineer with 5 years in C# and .NET",
+  "jobDescription": "Looking for a senior .NET developer with Azure experience"
+}
+
+
