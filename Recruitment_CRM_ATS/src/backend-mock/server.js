@@ -843,26 +843,6 @@ Return ONLY valid JSON, nothing else.`;
       console.warn('Ollama failed, trying OpenAI fallback...', error.message);
       return await parseResumeWithOpenAI(resumeText, prompt);
     }
-      const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
-        },
-        body: JSON.stringify({
-          model: process.env.OPENAI_MODEL || 'gpt-4',
-          messages: [
-            { role: 'system', content: 'You are a helpful assistant specialized in recruitment. Extract resume information and return ONLY valid JSON, no markdown, no code blocks.' },
-            { role: 'user', content: prompt }
-          ],
-          max_tokens: 2000,
-          response_format: { type: 'json_object' }
-        })
-      });
-      
-      const openaiData = await openaiResponse.json();
-      return JSON.parse(openaiData.choices[0].message.content);
-    }
     throw error;
   }
 }
