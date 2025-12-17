@@ -906,14 +906,9 @@ app.post('/api/ai/parse-resume-file', upload.single('file'), async (req, res) =>
       });
     }
     
-    // Parse with AI (with timeout - 60 seconds)
+    // Parse with AI (parseResumeWithAI has its own 120s timeout)
     console.log('Parsing resume with AI...');
-    const parsePromise = parseResumeWithAI(resumeText);
-    const parseTimeoutPromise = new Promise((_, reject) => 
-      setTimeout(() => reject(new Error('AI parsing timeout after 60 seconds')), 60000)
-    );
-    
-    const extractedData = await Promise.race([parsePromise, parseTimeoutPromise]);
+    const extractedData = await parseResumeWithAI(resumeText);
     
     console.log('Resume parsing completed successfully');
     
