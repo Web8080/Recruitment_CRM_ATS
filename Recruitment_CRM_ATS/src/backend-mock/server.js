@@ -920,14 +920,54 @@ app.post('/api/ai/parse-resume-file', upload.single('file'), async (req, res) =>
     
     console.log(`Extracted ${resumeText.length} characters from resume`);
     
-    // Check if Ollama is available before parsing
+    // PRIORITY: Use OpenAI if available (fastest and most reliable)
+    const useOpenAI = process.env.OPENAI_API_KEY && 
+                      process.env.OPENAI_API_KEY !== 'your-openai-api-key-here' &&
+                      process.env.OPENAI_API_KEY.trim().length > 0;
+    
+    if (useOpenAI) {
+      console.log('Using OpenAI for resume parsing (fastest option)');
+      const prompt = `Extract the following information from this resume in valid JSON format only (no markdown, no code blocks, just JSON):
+{
+  "fullName": "string or null",
+  "firstName": "string or null",
+  "lastName": "string or null",
+  "email": "string or null",
+  "phone": "string or null",
+  "skills": ["string"],
+  "experience": [{"company": "string", "position": "string", "duration": "string", "description": "string"}],
+  "education": [{"institution": "string", "degree": "string", "year": "string"}],
+  "summary": "string or null"
+}
+
+Resume text:
+${resumeText.substring(0, 6000)}
+
+Return ONLY valid JSON, nothing else.`;
+      
+      try {
+        const extractedData = await parseResumeWithOpenAI(resumeText, prompt);
+        console.log('Resume parsing completed successfully with OpenAI');
+        
+        return res.json({
+          extractedData,
+          rawText: resumeText.substring(0, 1000),
+          provider: 'OpenAI'
+        });
+      } catch (openaiError) {
+        console.error('OpenAI failed, falling back to Ollama:', openaiError.message);
+        // Fall through to Ollama fallback
+      }
+    }
+    
+    // FALLBACK: Use Ollama if OpenAI not available or failed
     const ollamaUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
     let ollamaAvailable = false;
     
     try {
       const healthCheck = await fetch(`${ollamaUrl}/api/tags`, { 
         method: 'GET',
-        signal: AbortSignal.timeout(3000) // 3 second timeout
+        signal: AbortSignal.timeout(2000) // 2 second timeout
       });
       ollamaAvailable = healthCheck.ok;
     } catch (healthError) {
@@ -935,18 +975,18 @@ app.post('/api/ai/parse-resume-file', upload.single('file'), async (req, res) =>
       ollamaAvailable = false;
     }
     
-    if (!ollamaAvailable && !process.env.OPENAI_API_KEY) {
+    if (!ollamaAvailable) {
       return res.status(503).json({ 
         error: 'Failed to process resume', 
-        details: 'Ollama service is not available. Please ensure Ollama is running.',
-        suggestion: 'Start Ollama: ollama serve (or install from https://ollama.ai)',
-        help: 'Alternatively, configure OPENAI_API_KEY in .env file for fallback',
+        details: 'Neither OpenAI nor Ollama is available. OpenAI is recommended for faster, more reliable parsing.',
+        suggestion: 'Configure OPENAI_API_KEY in .env file. Get key from: https://platform.openai.com/api-keys',
+        help: 'OpenAI is fast (2-5 seconds) and costs ~$0.0015 per resume',
         extractedText: resumeText.substring(0, 500) // Return partial text for debugging
       });
     }
     
-    // Parse with AI (parseResumeWithAI has its own 120s timeout)
-    console.log('Parsing resume with AI...');
+    // Parse with Ollama (has its own 180s timeout)
+    console.log('Parsing resume with Ollama (may be slow, 60-180 seconds)...');
     const extractedData = await parseResumeWithAI(resumeText);
     
     console.log('Resume parsing completed successfully');
