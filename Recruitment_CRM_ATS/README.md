@@ -688,11 +688,26 @@ See `PRODUCTION_READINESS.md` for detailed checklist:
 
 ## Documentation
 
-- **README.md** - This file (overview and architecture)
-- **PRODUCTION_READINESS.md** - Detailed production checklist
-- **TODO_CHECKLIST.md** - Complete task breakdown
-- **FEATURE_ROADMAP.md** - Future feature suggestions
-- **BUILD_STATUS.md** - Build and launch instructions
+All documentation is available in the [`docs/`](./docs/) folder:
+
+- **[Getting Started](./docs/GETTING_STARTED.md)** - Quick start guide
+- **[Production Readiness](./docs/PRODUCTION_READINESS.md)** - Detailed production checklist
+- **[TODO Checklist](./docs/TODO_CHECKLIST.md)** - Complete task breakdown
+- **[Feature Roadmap](./docs/FEATURE_ROADMAP.md)** - Future feature suggestions
+- **[Build Status](./docs/BUILD_STATUS.md)** - Build and launch instructions
+- **[Security Audit](./docs/SECURITY_AUDIT.md)** - Security findings and recommendations
+- **[Deployment Guide](./docs/DEPLOYMENT_GUIDE.md)** - Azure deployment instructions
+- **[Testing Guide](./docs/TESTING_GUIDE.md)** - Testing framework and guidelines
+
+### Additional Documentation
+
+- **[Implementation Summary](./docs/IMPLEMENTATION_SUMMARY_FINAL.md)** - Comprehensive features implementation
+- **[Ollama Setup](./docs/OLLAMA_SETUP.md)** - Local AI setup guide
+- **[Performance Tips](./docs/OLLAMA_PERFORMANCE_TIPS.md)** - Optimization guide
+- **[Timeout Solution](./docs/TIMEOUT_SOLUTION.md)** - AI parsing timeout fixes
+- **[PDF Parsing Solution](./docs/PDF_PARSING_SOLUTION.md)** - PDF extraction methods
+- **[Job Board Integration](./docs/JOB_BOARD_INTEGRATION_RESEARCH.md)** - Integration research
+- **[Improvements Suggestions](./docs/IMPROVEMENTS_SUGGESTIONS.md)** - Enhancement recommendations
 
 ## Contributing
 Contributions welcome! Please see the contributing guidelines (to be added).

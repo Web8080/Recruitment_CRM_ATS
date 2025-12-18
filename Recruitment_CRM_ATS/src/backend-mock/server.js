@@ -761,8 +761,8 @@ async function parseResumeWithAI(resumeText) {
   // Recommended: Set OLLAMA_MODEL=llama2:7b in .env for faster responses
   const model = process.env.OLLAMA_MODEL || 'llama2';
   
-  // Shorten prompt to reduce processing time
-  const resumePreview = resumeText.substring(0, 6000); // Reduced from 8000
+  // Further reduce prompt size for faster processing
+  const resumePreview = resumeText.substring(0, 4000); // Reduced from 6000 for speed
   
   const prompt = `Extract resume info as JSON only:
 {
@@ -805,15 +805,19 @@ Return ONLY valid JSON, no markdown, no code blocks.`;
       console.warn('Warmup failed, continuing anyway:', warmupError.message);
     }
     
-    // Create AbortController for timeout - increased to 180 seconds for slow Ollama
+    // Create AbortController for timeout - reduced to 120 seconds to fail faster
     const controller = new AbortController();
+    const OLLAMA_TIMEOUT = 120000; // 120 seconds (2 minutes) - reduced for faster failure
     const timeoutId = setTimeout(() => {
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/5fa351ce-2d88-48b9-85ba-5b934877b4e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:810',message:'Ollama timeout triggered',data:{timeout:OLLAMA_TIMEOUT},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
       console.warn('Ollama timeout approaching, aborting...');
       controller.abort();
-    }, 180000); // 180 second timeout (3 minutes)
+    }, OLLAMA_TIMEOUT);
     
     const startTime = Date.now();
-    console.log(`Calling Ollama with model: ${model}, timeout: 180s, prompt length: ${prompt.length}`);
+    console.log(`Calling Ollama with model: ${model}, timeout: ${OLLAMA_TIMEOUT/1000}s, prompt length: ${prompt.length}`);
     
     // #region agent log
     fetch('http://127.0.0.1:7243/ingest/5fa351ce-2d88-48b9-85ba-5b934877b4e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:819',message:'Starting Ollama fetch',data:{model,ollamaUrl,promptLength:prompt.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
@@ -829,7 +833,7 @@ Return ONLY valid JSON, no markdown, no code blocks.`;
           stream: false,
           options: { 
             temperature: 0.1, // Lower temperature for more consistent JSON
-            num_predict: 1500, // Reduced from 2000 to speed up
+            num_predict: 1000, // Further reduced for faster processing
             top_p: 0.9,
             top_k: 40
           }
@@ -876,11 +880,17 @@ Return ONLY valid JSON, no markdown, no code blocks.`;
         if (process.env.OPENAI_API_KEY) {
           return await parseResumeWithOpenAI(resumeText, prompt);
         }
-        throw new Error(`Ollama request timeout after ${elapsed}s. Ollama is very slow. Solutions: 1) Use smaller model: ollama pull llama2:7b, 2) Set OPENAI_API_KEY for faster fallback, 3) Check Ollama performance: ollama ps`);
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/5fa351ce-2d88-48b9-85ba-5b934877b4e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:875',message:'Ollama timeout detected, checking OpenAI fallback',data:{elapsed,hasOpenAIKey:!!process.env.OPENAI_API_KEY},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,D'})}).catch(()=>{});
+        // #endregion
+        throw new Error(`Ollama timeout after ${elapsed}s. The model "${model}" is too slow. QUICK FIX: Add OPENAI_API_KEY to .env file for instant parsing (2-5 seconds). Get key from: https://platform.openai.com/api-keys`);
       }
       throw fetchError;
     }
   } catch (error) {
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/5fa351ce-2d88-48b9-85ba-5b934877b4e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:883',message:'parseResumeWithAI general error',data:{errorMessage:error.message,hasOpenAIKey:!!process.env.OPENAI_API_KEY},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,D'})}).catch(()=>{});
+    // #endregion
     // If Ollama fails, try OpenAI fallback
     if (process.env.OPENAI_API_KEY) {
       console.warn('Ollama failed, trying OpenAI fallback...', error.message);

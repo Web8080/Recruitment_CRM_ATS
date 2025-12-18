@@ -95,19 +95,89 @@ class Database {
       this.candidates.push(candidate);
     }
 
-    // Initialize sample jobs
-    const jobTitles = [
-      'Senior Software Engineer', 'Full Stack Developer', 'DevOps Engineer', 
-      'Frontend Developer', 'Backend Developer', 'Cloud Architect', 
-      'Data Engineer', 'Machine Learning Engineer', 'Product Manager', 'QA Engineer'
+    // Initialize sample jobs with full descriptions and requirements
+    const jobsData = [
+      {
+        title: 'Senior Software Engineer',
+        department: 'Engineering',
+        location: 'London',
+        description: 'We are seeking an experienced Senior Software Engineer to join our dynamic engineering team. You will be responsible for designing, developing, and maintaining high-quality software solutions that power our recruitment platform. This role involves working with cutting-edge technologies and collaborating with cross-functional teams to deliver scalable and robust applications.',
+        requirements: '5+ years of software development experience, proficiency in C# and .NET 8, experience with Azure services, strong problem-solving skills, experience with microservices architecture, knowledge of RESTful APIs, Git version control, agile methodologies, excellent communication skills, bachelor\'s degree in Computer Science or related field.'
+      },
+      {
+        title: 'Full Stack Developer',
+        department: 'Engineering',
+        location: 'Remote',
+        description: 'Join our team as a Full Stack Developer and work on both frontend and backend systems. You will build responsive web applications using React and TypeScript, develop robust APIs, and ensure seamless integration between frontend and backend services. This role offers the opportunity to work on diverse projects and contribute to the full software development lifecycle.',
+        requirements: '3+ years of full stack development experience, proficiency in React, TypeScript, Node.js, experience with RESTful APIs, knowledge of SQL databases, understanding of modern web development practices, experience with Git, familiarity with CI/CD pipelines, strong debugging skills, ability to work independently and in teams.'
+      },
+      {
+        title: 'DevOps Engineer',
+        department: 'Engineering',
+        location: 'London',
+        description: 'We are looking for a DevOps Engineer to help build and maintain our cloud infrastructure. You will be responsible for automating deployments, managing CI/CD pipelines, monitoring system performance, and ensuring high availability of our services. This role involves working closely with development teams to streamline the deployment process and improve system reliability.',
+        requirements: '4+ years of DevOps experience, strong knowledge of Azure cloud services, experience with Azure DevOps, proficiency in infrastructure as code (Bicep/Terraform), knowledge of containerization (Docker, Kubernetes), experience with CI/CD pipelines, monitoring and logging tools expertise, scripting skills (PowerShell, Bash), understanding of security best practices, problem-solving abilities.'
+      },
+      {
+        title: 'Frontend Developer',
+        department: 'Engineering',
+        location: 'Remote',
+        description: 'As a Frontend Developer, you will create engaging and intuitive user interfaces for our recruitment platform. You will work with React, TypeScript, and Fluent UI to build responsive, accessible, and performant web applications. This role focuses on creating exceptional user experiences and ensuring our applications are visually appealing and easy to use.',
+        requirements: '2+ years of frontend development experience, proficiency in React and TypeScript, experience with Fluent UI or similar component libraries, knowledge of HTML5, CSS3, and JavaScript, understanding of responsive design principles, experience with state management (Zustand, Redux), knowledge of RESTful APIs, Git version control, attention to detail, portfolio of previous work.'
+      },
+      {
+        title: 'Backend Developer',
+        department: 'Engineering',
+        location: 'London',
+        description: 'We need a Backend Developer to design and implement robust server-side solutions. You will develop APIs, work with databases, integrate third-party services, and ensure system scalability and performance. This role involves working with Azure Functions, C# .NET 8, and various Azure services to build reliable backend systems.',
+        requirements: '3+ years of backend development experience, proficiency in C# and .NET 8, experience with Azure Functions, knowledge of SQL Server or Azure SQL, understanding of RESTful API design, experience with authentication and authorization, knowledge of microservices architecture, debugging and troubleshooting skills, experience with Git, strong problem-solving abilities.'
+      },
+      {
+        title: 'Cloud Architect',
+        department: 'Engineering',
+        location: 'Remote',
+        description: 'Join us as a Cloud Architect to design and implement scalable cloud solutions on Microsoft Azure. You will be responsible for architecting cloud infrastructure, ensuring security and compliance, optimizing costs, and guiding the team on cloud best practices. This role requires deep expertise in Azure services and cloud architecture patterns.',
+        requirements: '7+ years of cloud architecture experience, deep knowledge of Microsoft Azure services, Azure Solutions Architect certification preferred, experience with infrastructure as code, knowledge of security and compliance standards, experience with microservices and serverless architectures, strong communication and leadership skills, ability to design scalable systems, cost optimization expertise.'
+      },
+      {
+        title: 'Data Engineer',
+        department: 'Data',
+        location: 'London',
+        description: 'We are seeking a Data Engineer to build and maintain our data pipelines and analytics infrastructure. You will work with large datasets, design ETL processes, ensure data quality, and enable data-driven decision making. This role involves working with Azure Data Factory, SQL databases, and various data processing tools.',
+        requirements: '4+ years of data engineering experience, proficiency in SQL and Python, experience with Azure Data Factory or similar ETL tools, knowledge of data warehousing concepts, experience with data modeling, understanding of data quality and governance, experience with big data technologies, strong analytical skills, attention to detail.'
+      },
+      {
+        title: 'Machine Learning Engineer',
+        department: 'Data',
+        location: 'Remote',
+        description: 'Join our team as a Machine Learning Engineer to develop AI-powered features for our recruitment platform. You will work on resume parsing, candidate matching, and other ML models to enhance our platform\'s intelligence. This role involves working with LLMs, building ML pipelines, and deploying models to production.',
+        requirements: '3+ years of ML engineering experience, proficiency in Python, experience with machine learning frameworks (TensorFlow, PyTorch), knowledge of LLMs and NLP, experience with Azure AI services, understanding of MLOps practices, experience with model deployment, strong mathematical background, problem-solving skills, bachelor\'s degree in relevant field.'
+      },
+      {
+        title: 'Product Manager',
+        department: 'Product',
+        location: 'London',
+        description: 'We are looking for a Product Manager to drive the development of our recruitment platform. You will work with stakeholders to define product requirements, prioritize features, and guide the development team. This role involves understanding user needs, analyzing market trends, and ensuring our product delivers value to recruiters and candidates.',
+        requirements: '5+ years of product management experience, experience with SaaS products, strong analytical skills, excellent communication and presentation skills, experience with agile methodologies, ability to work with cross-functional teams, understanding of recruitment/HR domain preferred, data-driven decision making, strategic thinking, bachelor\'s degree.'
+      },
+      {
+        title: 'QA Engineer',
+        department: 'Engineering',
+        location: 'Remote',
+        description: 'Join our QA team to ensure the quality and reliability of our recruitment platform. You will design and execute test plans, automate testing processes, identify bugs, and work with developers to resolve issues. This role involves both manual and automated testing to ensure our platform meets high quality standards.',
+        requirements: '3+ years of QA experience, experience with test automation frameworks, knowledge of testing methodologies, experience with API testing, understanding of web application testing, experience with bug tracking tools, attention to detail, strong analytical skills, experience with CI/CD integration, ISTQB certification preferred.'
+      }
     ];
 
     for (let i = 0; i < 10; i++) {
+      const jobData = jobsData[i];
       this.jobs.push({
         id: `job-${i + 1}`,
-        title: jobTitles[i],
-        department: ['Engineering', 'Product', 'Data'][Math.floor(Math.random() * 3)],
-        location: ['Remote', 'New York', 'San Francisco', 'London'][Math.floor(Math.random() * 4)],
+        title: jobData.title,
+        department: jobData.department,
+        location: jobData.location,
+        description: jobData.description,
+        requirements: jobData.requirements,
         status: ['Open', 'Open', 'Open', 'Closed', 'OnHold'][Math.floor(Math.random() * 5)],
         createdAt: new Date(Date.now() - (10 - i) * 24 * 60 * 60 * 1000).toISOString()
       });
