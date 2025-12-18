@@ -815,6 +815,10 @@ Return ONLY valid JSON, no markdown, no code blocks.`;
     const startTime = Date.now();
     console.log(`Calling Ollama with model: ${model}, timeout: 180s, prompt length: ${prompt.length}`);
     
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/5fa351ce-2d88-48b9-85ba-5b934877b4e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:819',message:'Starting Ollama fetch',data:{model,ollamaUrl,promptLength:prompt.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
+    
     try {
       const response = await fetch(`${ollamaUrl}/api/generate`, {
         method: 'POST',
@@ -886,17 +890,105 @@ Return ONLY valid JSON, no markdown, no code blocks.`;
   }
 }
 
+async function parseResumeWithOpenAI(resumeText, prompt) {
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/5fa351ce-2d88-48b9-85ba-5b934877b4e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:888',message:'parseResumeWithOpenAI called',data:{promptLength:prompt?.length,resumeTextLength:resumeText?.length,hasApiKey:!!process.env.OPENAI_API_KEY},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B'})}).catch(()=>{});
+  // #endregion
+  
+  const OPENAI_TIMEOUT = 60000; // 60 seconds for OpenAI
+  
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/5fa351ce-2d88-48b9-85ba-5b934877b4e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:893',message:'OpenAI timeout triggered',data:{elapsed:60000},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+      controller.abort();
+    }, OPENAI_TIMEOUT);
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/5fa351ce-2d88-48b9-85ba-5b934877b4e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:896',message:'Calling OpenAI API',data:{model:process.env.OPENAI_MODEL||'gpt-3.5-turbo'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
+    
+    const openAIStartTime = Date.now();
+    const openaiResponse = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`
+      },
+      body: JSON.stringify({
+        model: process.env.OPENAI_MODEL || 'gpt-3.5-turbo',
+        messages: [
+          { role: 'system', content: 'You are a helpful assistant specialized in recruitment. Extract resume information and return ONLY valid JSON, no markdown, no code blocks.' },
+          { role: 'user', content: prompt }
+        ],
+        max_tokens: 2000,
+        response_format: { type: 'json_object' },
+        temperature: 0.3
+      }),
+      signal: controller.signal
+    });
+    
+    clearTimeout(timeoutId);
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/5fa351ce-2d88-48b9-85ba-5b934877b4e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:915',message:'OpenAI response received',data:{status:openaiResponse.status,statusText:openaiResponse.statusText,duration:Date.now()-openAIStartTime},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
+    
+    if (!openaiResponse.ok) {
+      const errorData = await openaiResponse.json().catch(() => ({}));
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/5fa351ce-2d88-48b9-85ba-5b934877b4e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:920',message:'OpenAI API error',data:{status:openaiResponse.status,errorData},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+      // #endregion
+      throw new Error(`OpenAI API error: ${openaiResponse.statusText} - ${errorData.error?.message || ''}`);
+    }
+    
+    const openaiData = await openaiResponse.json();
+    const content = openaiData.choices[0]?.message?.content;
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/5fa351ce-2d88-48b9-85ba-5b934877b4e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:927',message:'OpenAI response parsed',data:{hasContent:!!content,contentLength:content?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+    // #endregion
+    
+    if (!content) {
+      throw new Error('OpenAI returned empty response');
+    }
+    
+    return JSON.parse(content);
+  } catch (error) {
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/5fa351ce-2d88-48b9-85ba-5b934877b4e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:933',message:'parseResumeWithOpenAI error',data:{errorName:error?.name,errorMessage:error?.message,isAbort:error?.name==='AbortError'},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B'})}).catch(()=>{});
+    // #endregion
+    
+    if (error.name === 'AbortError') {
+      throw new Error('OpenAI request timed out after 60 seconds');
+    }
+    throw error;
+  }
+}
+
 app.post('/api/ai/parse-resume-file', upload.single('file'), async (req, res) => {
+  // #region agent log
+  fetch('http://127.0.0.1:7243/ingest/5fa351ce-2d88-48b9-85ba-5b934877b4e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:889',message:'parse-resume-file endpoint called',data:{fileName:req.file?.originalname,fileSize:req.file?.size},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C,D,E'})}).catch(()=>{});
+  // #endregion
+  
   if (!req.file) {
     return res.status(400).json({ error: 'No file uploaded' });
   }
 
   const filePath = req.file.path;
   let resumeText = null;
+  const overallStartTime = Date.now();
 
   try {
     console.log(`Processing resume file: ${req.file.originalname} (${(req.file.size / 1024).toFixed(2)} KB)`);
     
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/5fa351ce-2d88-48b9-85ba-5b934877b4e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:900',message:'Starting file extraction',data:{filePath,mimeType:req.file.mimetype},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
+    
+    const extractStartTime = Date.now();
     // Extract text with timeout handling (45 seconds)
     const extractPromise = extractTextFromFile(filePath, req.file.mimetype);
     const extractTimeoutPromise = new Promise((_, reject) => 
@@ -904,6 +996,10 @@ app.post('/api/ai/parse-resume-file', upload.single('file'), async (req, res) =>
     );
     
     resumeText = await Promise.race([extractPromise, extractTimeoutPromise]);
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/5fa351ce-2d88-48b9-85ba-5b934877b4e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:906',message:'File extraction completed',data:{extractDuration:Date.now()-extractStartTime,textLength:resumeText?.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
+    // #endregion
     
     // Clean up file immediately after extraction
     if (fs.existsSync(filePath)) {
@@ -925,8 +1021,17 @@ app.post('/api/ai/parse-resume-file', upload.single('file'), async (req, res) =>
                       process.env.OPENAI_API_KEY !== 'your-openai-api-key-here' &&
                       process.env.OPENAI_API_KEY.trim().length > 0;
     
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/5fa351ce-2d88-48b9-85ba-5b934877b4e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:924',message:'Checking AI provider',data:{useOpenAI,hasOpenAIKey:!!process.env.OPENAI_API_KEY,openAIKeyLength:process.env.OPENAI_API_KEY?.length,openAIKeyPrefix:process.env.OPENAI_API_KEY?.substring(0,7)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,D'})}).catch(()=>{});
+    // #endregion
+    
     if (useOpenAI) {
       console.log('Using OpenAI for resume parsing (fastest option)');
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/5fa351ce-2d88-48b9-85ba-5b934877b4e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:928',message:'OpenAI path selected',data:{parseResumeWithOpenAIDefined:typeof parseResumeWithOpenAI},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
+      // #endregion
+      
       const prompt = `Extract the following information from this resume in valid JSON format only (no markdown, no code blocks, just JSON):
 {
   "fullName": "string or null",
@@ -946,7 +1051,17 @@ ${resumeText.substring(0, 6000)}
 Return ONLY valid JSON, nothing else.`;
       
       try {
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/5fa351ce-2d88-48b9-85ba-5b934877b4e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:949',message:'Calling parseResumeWithOpenAI',data:{promptLength:prompt.length,resumeTextLength:resumeText.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B'})}).catch(()=>{});
+        // #endregion
+        
+        const openAIStartTime = Date.now();
         const extractedData = await parseResumeWithOpenAI(resumeText, prompt);
+        
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/5fa351ce-2d88-48b9-85ba-5b934877b4e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:950',message:'OpenAI parsing completed',data:{duration:Date.now()-openAIStartTime,hasData:!!extractedData},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
+        // #endregion
+        
         console.log('Resume parsing completed successfully with OpenAI');
         
         return res.json({
@@ -955,22 +1070,42 @@ Return ONLY valid JSON, nothing else.`;
           provider: 'OpenAI'
         });
       } catch (openaiError) {
+        // #region agent log
+        fetch('http://127.0.0.1:7243/ingest/5fa351ce-2d88-48b9-85ba-5b934877b4e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:957',message:'OpenAI error caught',data:{errorName:openaiError?.name,errorMessage:openaiError?.message,errorStack:openaiError?.stack?.substring(0,200)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,E'})}).catch(()=>{});
+        // #endregion
+        
         console.error('OpenAI failed, falling back to Ollama:', openaiError.message);
         // Fall through to Ollama fallback
       }
     }
     
     // FALLBACK: Use Ollama if OpenAI not available or failed
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/5fa351ce-2d88-48b9-85ba-5b934877b4e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:963',message:'Falling back to Ollama',data:{useOpenAI},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
+    
     const ollamaUrl = process.env.OLLAMA_BASE_URL || 'http://localhost:11434';
     let ollamaAvailable = false;
     
     try {
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/5fa351ce-2d88-48b9-85ba-5b934877b4e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:968',message:'Checking Ollama health',data:{ollamaUrl},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
+      
       const healthCheck = await fetch(`${ollamaUrl}/api/tags`, { 
         method: 'GET',
         signal: AbortSignal.timeout(2000) // 2 second timeout
       });
       ollamaAvailable = healthCheck.ok;
+      
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/5fa351ce-2d88-48b9-85ba-5b934877b4e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:972',message:'Ollama health check result',data:{ollamaAvailable,status:healthCheck.status},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
     } catch (healthError) {
+      // #region agent log
+      fetch('http://127.0.0.1:7243/ingest/5fa351ce-2d88-48b9-85ba-5b934877b4e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:974',message:'Ollama health check failed',data:{errorMessage:healthError?.message,errorName:healthError?.name},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+      // #endregion
+      
       console.warn('Ollama health check failed:', healthError.message);
       ollamaAvailable = false;
     }
@@ -987,15 +1122,30 @@ Return ONLY valid JSON, nothing else.`;
     
     // Parse with Ollama (has its own 180s timeout)
     console.log('Parsing resume with Ollama (may be slow, 60-180 seconds)...');
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/5fa351ce-2d88-48b9-85ba-5b934877b4e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:989',message:'Calling parseResumeWithAI (Ollama)',data:{resumeTextLength:resumeText.length},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
+    
+    const ollamaStartTime = Date.now();
     const extractedData = await parseResumeWithAI(resumeText);
+    
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/5fa351ce-2d88-48b9-85ba-5b934877b4e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:992',message:'Ollama parsing completed',data:{duration:Date.now()-ollamaStartTime,hasData:!!extractedData},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
+    // #endregion
     
     console.log('Resume parsing completed successfully');
     
     res.json({
       extractedData,
-      rawText: resumeText.substring(0, 1000) // Return first 1000 chars for preview
+      rawText: resumeText.substring(0, 1000), // Return first 1000 chars for preview
+      provider: 'Ollama'
     });
   } catch (error) {
+    // #region agent log
+    fetch('http://127.0.0.1:7243/ingest/5fa351ce-2d88-48b9-85ba-5b934877b4e9',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'server.js:998',message:'Error caught in parse-resume-file',data:{errorName:error?.name,errorMessage:error?.message,errorCode:error?.code,errorCause:error?.cause?.code,overallDuration:Date.now()-overallStartTime,hasResumeText:!!resumeText},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C,D,E'})}).catch(()=>{});
+    // #endregion
+    
     // Clean up file on error
     if (filePath && fs.existsSync(filePath)) {
       fs.unlinkSync(filePath);
